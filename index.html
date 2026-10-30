@@ -673,20 +673,9 @@ function updateEntities(dt, time){
       if (pe) { grabStart(pe, 'grab'); held = pe; callT = 0; }
       else if (hand.open) {
         const over = entityAt(hand.palm, 0.1, e => e.mode !== 'air');
-        const cand = over || entities.find(e => e.fly && e.mode === 'floor');
+        const cand = over;
         for (const o of entities) if (o !== cand) o.palmT = 0;
         if (cand) { cand.palmT += dt; if (cand.palmT > (cand.fly ? 0.8 : 0.5)) { grabStart(cand, 'hand'); held = cand; } }
-        /* an open hand held low and still calls the nearest walker over */
-        if (!over) {
-          callT += dt;
-          const g = floorPoint(hand.palm.x, hand.palm.y + hand.size * 0.8);
-          if (callT > 0.9 && g && Math.hypot(g.x, g.z) < 5) {
-            const walkers = entities.filter(e => !e.fly && (e.mode === 'floor' || e.mode === 'walk'));
-            let w = walkers.find(e => e.mode === 'walk');
-            if (!w && walkers.length) w = walkers.reduce((a, b) => Math.hypot(a.x - g.x, a.z - g.z) < Math.hypot(b.x - g.x, b.z - g.z) ? a : b);
-            if (w) { w.goal = g; if (w.mode === 'floor' && Math.hypot(w.x - g.x, w.z - g.z) > w.w * w.scale * 0.6 + 0.15) w.mode = 'walk'; }
-          }
-        } else callT = 0;
       } else {
         callT = 0; for (const o of entities) o.palmT = 0;
         const pk = !hand.pinch ? entityAt(hand.tip, -0.05) : null;
@@ -726,7 +715,7 @@ function updateEntities(dt, time){
     else if (held?.mode === 'hand' || held?.mode === 'hop') tip(held.fly ? held.a.name + ' على كفّك. <b>اقبض يدك</b> ليطير' : 'على كفّك. قرّب يدك وبعّدها، أو ضعه فوق مجسّم آخر و<b>اقبض</b> ليركبه');
     else if (held?.mode === 'grab') tip('ممسوك. هزّه برفق، أو ضعه فوق مجسّم آخر و<b>افتح أصابعك</b>');
     else if (entities.some(e => e.mode === 'walk')) tip('قادم إليك… أبقِ كفّك مفتوحة');
-    else if (hand) tip('<b>المسه</b> ليرتد · <b>افتح كفّك</b> قرب الأرض لينادى إليك · <b>اقرصه</b> لتحمله');
+    else if (hand) tip('<b>المسه</b> ليرتد · <b>افتح كفّك</b> عنده ليصعد عليها · <b>اقرصه</b> لتحمله');
     else tip('أدخل يدك أمام الكاميرا');
   } else if (mountMsgT > 0) { mountMsgT -= dt; hint(mountMsg); if (mountMsgT <= 0) hint(DEF_HINT); }
 
