@@ -94,6 +94,10 @@ model-viewer{width:100%;height:100%;--poster-color:transparent;background:transp
 .status{font-size:13px;color:var(--fg);min-height:1.2em}
 .status.err{color:var(--danger)}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.actions .wide{grid-column:1/-1}
+#hands{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.hand-tip{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(var(--safe-b) + 128px);max-width:calc(100% - 32px);width:max-content;text-align:center;font-size:13px;line-height:1.6;padding:8px 14px;border-radius:14px;color:#f2efe9}
+.hand-tip b{color:var(--accent);font-weight:600}
 #xrUI{position:fixed;inset:0;z-index:30;touch-action:none;background:transparent}
 #xrUI.clean .xr-ctl{opacity:0;pointer-events:none}
 .xr-bottom{position:absolute;left:0;right:0;bottom:calc(var(--safe-b) + 28px);display:flex;justify-content:center;align-items:center;gap:12px;padding:0 16px}
@@ -128,7 +132,11 @@ model-viewer{width:100%;height:100%;--poster-color:transparent;background:transp
   <div class="tray" id="tray" role="list"></div>
 
   <div class="actions">
-    <button class="btn primary" id="goCam">
+    <button class="btn primary wide" id="goHands">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V12M11 11.5V4a1.5 1.5 0 0 1 3 0v8M14 11.5V5.5a1.5 1.5 0 0 1 3 0V13M17 10a1.5 1.5 0 0 1 3 0v4.5A7 7 0 0 1 13 21h-1.2a6 6 0 0 1-4.6-2.2L4.4 15.4a1.5 1.5 0 0 1 2.2-2L8 15"/></svg>
+      تفاعل بيدك
+    </button>
+    <button class="btn ghost" id="goCam">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
       صوّر بالكاميرا
     </button>
@@ -144,7 +152,9 @@ model-viewer{width:100%;height:100%;--poster-color:transparent;background:transp
 <section id="cam" class="screen" hidden>
   <video id="video" playsinline muted autoplay></video>
   <canvas id="gl"></canvas>
+  <canvas id="hands"></canvas>
   <div class="flash" id="flash"></div>
+  <div class="hand-tip glass" id="handTip" hidden>أدخل يدك أمام الكاميرا</div>
   <div class="cam-error" id="camError" hidden></div>
 
   <div class="cam-top">
@@ -373,9 +383,11 @@ $('glbFile').addEventListener('change', async e => {
 /* ---------- camera compositor ---------- */
 let camActive = false, stream = null, renderer, scene, camera, holder, ground, mixer, clock, raf, sun, reticle;
 let xrMode = false, xrSupported = false, hitSource = null;
+let baseH = 1, idleA = null, moveA = null, curA = null;
+const hctx = $('hands').getContext('2d');
 const loader = new GLTFLoader(); loader.setCrossOrigin('anonymous');
 const camEl = $('cam'), video = $('video'), gl = $('gl');
-const state = { tilt: 32, scale: 1, rotY: 0, x: 0, z: 0 };
+const state = { tilt: 32, scale: 1, rotY: 0, x: 0, y: 0, z: 0 };
 
 function initThree(){
   if (renderer) return;
@@ -404,13 +416,14 @@ function resize(){
   if (!renderer) return;
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w, h, false); camera.aspect = w / h; placeCamera();
+  const hc = $('hands'), dpr = Math.min(devicePixelRatio, 2); hc.width = w * dpr; hc.height = h * dpr; hctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 function placeCamera(){
   const t = THREE.MathUtils.degToRad(state.tilt), D = 3.2;
   camera.position.set(0, D * Math.sin(t), D * Math.cos(t));
   camera.lookAt(0, 0.35, 0); camera.updateProjectionMatrix();
 }
-function applyTransform(){ if (!xrMode) holder.position.set(state.x, 0, state.z); holder.scale.setScalar(state.scale); holder.rotation.y = state.rotY; }
+function applyTransform(){ if (!xrMode) holder.position.set(state.x, state.y, state.z); holder.scale.setScalar(state.scale); holder.rotation.y = state.rotY; }
 
 let loadToken = 0;
 function loadIntoScene(a){
@@ -427,19 +440,32 @@ function loadIntoScene(a){
     const b2 = new THREE.Box3().setFromObject(m), c = b2.getCenter(new THREE.Vector3());
     m.position.x -= c.x; m.position.z -= c.z; m.position.y -= b2.min.y;
     holder.add(m);
-    if (gltf.animations?.length) { mixer = new THREE.AnimationMixer(m); mixer.clipAction(gltf.animations[0]).play(); }
+    baseH = b2.max.y - b2.min.y; state.y = 0; phys.mode = 'floor'; phys.vy = 0;
+    idleA = moveA = curA = null;
+    if (gltf.animations?.length) {
+      mixer = new THREE.AnimationMixer(m);
+      const acts = gltf.animations.map(c => mixer.clipAction(c));
+      idleA = acts.find(a => /idle|survey|stand/i.test(a.getClip().name)) || acts[0];
+      moveA = acts.find(a => /run|walk|jump/i.test(a.getClip().name)) || null;
+      idleA.play(); curA = idleA;
+    }
     $('camHint').textContent = 'اسحب لتحريكه · إصبعان للتكبير والتدوير';
   }, undefined, () => { if (tok === loadToken) $('camHint').textContent = 'تعذّر تحميل المجسّم'; });
 }
 
 function loop(){
   raf = requestAnimationFrame(loop);
-  const dt = clock.getDelta(); if (mixer) mixer.update(dt);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  if (handsOn) handStep(dt);
+  applyTransform();
+  if (mixer) mixer.update(dt);
   renderer.render(scene, camera);
 }
 
-async function openCam(){
+async function openCam(withHands = false){
   initThree();
+  handsOn = withHands; $('handTip').hidden = !withHands; $('handTip').textContent = 'أدخل يدك أمام الكاميرا';
+  if (withHands) initHands().catch(() => { $('handTip').textContent = 'تعذّر تحميل تتبّع اليد. تحقق من الإنترنت وأعد المحاولة.'; });
   $('studio').hidden = true; camEl.hidden = false; camActive = true;
   $('camError').hidden = true;
   resize(); applyTransform(); loadIntoScene(current);
@@ -458,12 +484,14 @@ async function openCam(){
 }
 function closeCam(){
   camActive = false; cancelAnimationFrame(raf);
+  handsOn = false; hctx.clearRect(0, 0, innerWidth, innerHeight); state.y = 0; phys.mode = 'floor';
   stream?.getTracks().forEach(t => t.stop()); stream = null; video.srcObject = null;
   camEl.hidden = true; $('studio').hidden = false;
 }
 $('goCam').addEventListener('click', () => xrSupported ? startXR() : openCam());
+$('goHands').addEventListener('click', () => openCam(true));
 $('camBack').addEventListener('click', closeCam);
-$('camReset').addEventListener('click', () => { Object.assign(state, { scale: 1, rotY: 0, x: 0, z: 0, tilt: 32 }); $('tilt').value = 32; placeCamera(); applyTransform(); });
+$('camReset').addEventListener('click', () => { Object.assign(state, { scale: 1, rotY: 0, x: 0, y: 0, z: 0, tilt: 32 }); phys.mode = 'floor'; phys.vy = 0; $('tilt').value = 32; placeCamera(); applyTransform(); });
 $('tilt').addEventListener('input', e => { state.tilt = +e.target.value; placeCamera(); });
 $('camSwitch').addEventListener('click', () => { const i = assets.indexOf(current); select(assets[(i + 1) % assets.length]); toast(current.name, 1200); });
 $('camShadow').addEventListener('click', e => { ground.visible = !ground.visible; e.currentTarget.setAttribute('aria-pressed', ground.visible); e.currentTarget.style.opacity = ground.visible ? 1 : .5; });
@@ -567,6 +595,109 @@ xrUI.addEventListener('pointermove', e => {
 });
 const xend = e => { xpts.delete(e.pointerId); if (xpts.size < 2) x0 = null; };
 xrUI.addEventListener('pointerup', xend); xrUI.addEventListener('pointercancel', xend);
+
+/* ---------- live hand interaction (camera mode) ---------- */
+let handsOn = false, landmarker = null, landmarkerP = null, lastVT = -1, hand = null;
+const phys = { mode: 'floor', vy: 0, spin: 0, palmT: 0, lostT: 0, pokeCD: 0 };
+const MP = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+function initHands(){
+  return landmarkerP ||= (async () => {
+    const { FilesetResolver, HandLandmarker } = await import(MP + '/vision_bundle.mjs');
+    const fs = await FilesetResolver.forVisionTasks(MP + '/wasm');
+    const opts = delegate => ({ baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task', delegate }, runningMode: 'VIDEO', numHands: 1 });
+    try { landmarker = await HandLandmarker.createFromOptions(fs, opts('GPU')); }
+    catch { landmarker = await HandLandmarker.createFromOptions(fs, opts('CPU')); }
+    return landmarker;
+  })().catch(e => { landmarkerP = null; throw e; });
+}
+const d2 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+function toScreen(l){
+  const W = innerWidth, H = innerHeight, vw = video.videoWidth, vh = video.videoHeight, s = Math.max(W / vw, H / vh);
+  return { x: l.x * vw * s + (W - vw * s) / 2, y: l.y * vh * s + (H - vh * s) / 2 };
+}
+function readHand(lms){
+  const p = lms.map(toScreen), size = d2(p[0], p[9]) || 1;
+  const palmIdx = [0, 5, 9, 13, 17];
+  const palm = { x: palmIdx.reduce((a, i) => a + p[i].x, 0) / 5, y: palmIdx.reduce((a, i) => a + p[i].y, 0) / 5 };
+  const ext = [[8, 6], [12, 10], [16, 14], [20, 18]].filter(([t, j]) => d2(p[t], p[0]) > d2(p[j], p[0]) * 1.15).length;
+  const pinch = d2(p[4], p[8]) < size * 0.33;
+  return { p, size, palm, open: ext >= 3 && !pinch, fist: ext === 0 && !pinch, pinch, pinchPt: { x: (p[4].x + p[8].x) / 2, y: (p[4].y + p[8].y) / 2 }, tip: p[8] };
+}
+const _plane = new THREE.Plane(), _n = new THREE.Vector3(), _v = new THREE.Vector3();
+function worldAt(sx, sy){
+  camera.getWorldDirection(_n); _plane.setFromNormalAndCoplanarPoint(_n.negate(), holder.position);
+  ray.setFromCamera({ x: sx / innerWidth * 2 - 1, y: -(sy / innerHeight) * 2 + 1 }, camera);
+  return ray.ray.intersectPlane(_plane, _v) ? _v.clone() : null;
+}
+const _box = new THREE.Box3();
+function modelRect(){
+  _box.setFromObject(holder); if (_box.isEmpty()) return null;
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (let i = 0; i < 8; i++) {
+    _v.set(i & 1 ? _box.max.x : _box.min.x, i & 2 ? _box.max.y : _box.min.y, i & 4 ? _box.max.z : _box.min.z).project(camera);
+    const x = (_v.x + 1) / 2 * innerWidth, y = (1 - _v.y) / 2 * innerHeight;
+    x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+  }
+  const px = (x1 - x0) * 0.15, py = (y1 - y0) * 0.15;
+  return { x0: x0 - px, x1: x1 + px, y0: y0 - py, y1: y1 + py };
+}
+function setMoving(on){
+  const t = on && moveA ? moveA : idleA;
+  if (!t || t === curA) return;
+  t.reset().fadeIn(0.25).play(); curA?.fadeOut(0.25); curA = t;
+}
+const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+function drawHand(){
+  hctx.clearRect(0, 0, innerWidth, innerHeight);
+  if (!hand) return;
+  hctx.lineWidth = 2; hctx.strokeStyle = 'rgba(255,255,255,.35)';
+  hctx.beginPath(); for (const [a, b] of BONES) { hctx.moveTo(hand.p[a].x, hand.p[a].y); hctx.lineTo(hand.p[b].x, hand.p[b].y); } hctx.stroke();
+  hctx.fillStyle = '#f0b44c';
+  for (const i of [4, 8, 12, 16, 20]) { hctx.beginPath(); hctx.arc(hand.p[i].x, hand.p[i].y, 4, 0, 7); hctx.fill(); }
+}
+let tipText = '';
+function tip(t){ if (t !== tipText) { tipText = t; $('handTip').innerHTML = t; } }
+function handStep(dt){
+  if (landmarker && video.readyState >= 2 && video.currentTime !== lastVT) {
+    lastVT = video.currentTime;
+    try { const r = landmarker.detectForVideo(video, performance.now()); hand = r.landmarks?.[0] ? readHand(r.landmarks[0]) : null; } catch { hand = null; }
+    drawHand();
+  }
+  if (!landmarker) return;
+  const r = modelRect(), inR = q => r && q.x > r.x0 && q.x < r.x1 && q.y > r.y0 && q.y < r.y1;
+  phys.pokeCD -= dt;
+  const follow = (q, lift) => {
+    const t = worldAt(q.x, q.y); if (!t) return;
+    const k = Math.min(1, dt * 14);
+    state.x += (t.x - state.x) * k; state.z += (t.z - state.z) * k;
+    state.y += (Math.max(0, t.y - lift) - state.y) * k;
+  };
+  if (phys.mode === 'hand') {
+    if (!hand || hand.fist) { phys.lostT += dt; if (phys.lostT > 0.3) { phys.mode = 'air'; phys.vy = 0; phys.lostT = 0; } }
+    else { phys.lostT = 0; follow(hand.palm, 0); }
+    tip('على كفّك! <b>اقبض يدك</b> ليسقط');
+  } else if (phys.mode === 'grab') {
+    if (!hand || !hand.pinch) { phys.lostT += dt; if (phys.lostT > 0.2) { phys.mode = 'air'; phys.vy = 0; phys.lostT = 0; } }
+    else { phys.lostT = 0; follow(hand.pinchPt, baseH * state.scale * 0.85); }
+    tip('ممسوك! <b>افتح أصابعك</b> لتفلته');
+  } else {
+    if (hand) {
+      if (hand.pinch && inR(hand.pinchPt)) { phys.mode = 'grab'; phys.palmT = 0; }
+      else if (hand.open && inR(hand.palm)) { phys.palmT += dt; if (phys.palmT > 0.5) { phys.mode = 'hand'; phys.palmT = 0; phys.vy = 0; } }
+      else phys.palmT = 0;
+      if (phys.mode !== 'hand' && phys.mode !== 'grab' && !hand.open && inR(hand.tip) && phys.pokeCD <= 0 && state.y < 0.01) {
+        phys.vy = 3.4; phys.mode = 'air'; phys.spin = (Math.random() < 0.5 ? -1 : 1) * 7; phys.pokeCD = 0.9;
+      }
+      tip('<b>المسه</b> بإصبعك ليقفز · <b>افتح كفّك</b> عنده ليصعد عليها · <b>اقرصه</b> لتمسكه');
+    } else tip('أدخل يدك أمام الكاميرا');
+    if (phys.mode === 'air' || state.y > 0) {
+      phys.vy -= 9.8 * dt; state.y += phys.vy * dt;
+      if (state.y <= 0) { state.y = 0; if (phys.vy < -1.6) phys.vy = -phys.vy * 0.32; else { phys.vy = 0; phys.mode = 'floor'; } }
+    }
+  }
+  if (phys.spin) { state.rotY += phys.spin * dt; phys.spin *= Math.pow(0.04, dt); if (Math.abs(phys.spin) < 0.05) phys.spin = 0; }
+  setMoving(phys.mode !== 'floor' || Math.abs(phys.spin) > 0.5);
+}
 
 /* capture: camera frame (cover-cropped) + 3D layer */
 let lastBlob = null, lastURL = null;
