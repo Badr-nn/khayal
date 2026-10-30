@@ -207,7 +207,7 @@ model-viewer{width:100%;height:100%;--poster-color:transparent;background:transp
   </div>
 
   <div class="tilt glass">
-    <span>زاوية الأرض</span>
+    <span id="tiltLabel">زاوية الأرض</span>
     <input type="range" id="tilt" min="8" max="80" value="32" aria-label="زاوية الأرض">
   </div>
 
@@ -220,6 +220,9 @@ model-viewer{width:100%;height:100%;--poster-color:transparent;background:transp
     </div>
     <button class="shutter" id="shutter" aria-label="التقاط"><i></i></button>
     <div class="side end">
+      <button class="round glass" id="camAnchor" aria-label="تثبيت المجسّمات في مكانها" aria-pressed="false" style="opacity:.5">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/></svg>
+      </button>
       <button class="round glass" id="camShadow" aria-label="الظل" aria-pressed="true">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="9" r="5"/><ellipse cx="12" cy="19.5" rx="7" ry="1.8" fill="currentColor" opacity=".5" stroke="none"/></svg>
       </button>
@@ -577,6 +580,51 @@ function loadIntoScene(a){
   }).catch(() => { if (tok === loadToken) $('xrHint').textContent = 'تعذّر تحميل ' + a.name; });
 }
 
+/* ---------- keep the scene fixed in the room while the phone turns (gyroscope, 3 degrees of freedom) ---------- */
+let gyroOn = false, gyroAvail = false, gyroAsked = false, devOk = false, yaw0 = null;
+const devQ = new THREE.Quaternion(), _eul = new THREE.Euler(), _qa = new THREE.Quaternion(), _qg = new THREE.Quaternion();
+const _q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)), _zee = new THREE.Vector3(0, 0, 1);
+function onOrient(ev){
+  if (ev.alpha == null) return;
+  const d = Math.PI / 180, orient = (screen.orientation?.angle ?? window.orientation ?? 0) * d;
+  _eul.set(ev.beta * d, ev.alpha * d, -ev.gamma * d, 'YXZ');
+  devQ.setFromEuler(_eul).multiply(_q1).multiply(_qa.setFromAxisAngle(_zee, -orient));
+  devOk = true;
+  if (!gyroAvail) { gyroAvail = true; if (camActive) { setGyro(true); toast('مثبّت: لفّ الجوال يميناً ويساراً، والمجسّمات تبقى مكانها', 2600); } }
+}
+function initGyro(){
+  if (gyroAsked) return; gyroAsked = true;
+  const start = () => addEventListener('deviceorientation', onOrient);
+  try {
+    if (typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission)
+      DeviceOrientationEvent.requestPermission().then(r => { if (r === 'granted') start(); }).catch(() => {});
+    else start();
+  } catch {}
+}
+function setGyro(on){
+  gyroOn = on && gyroAvail; yaw0 = null;
+  const b = $('camAnchor'); b.setAttribute('aria-pressed', gyroOn); b.style.opacity = gyroOn ? 1 : .5;
+  $('tiltLabel').textContent = gyroOn ? 'ارتفاع الكاميرا' : 'زاوية الأرض';
+  if (!gyroOn) placeCamera();
+}
+const camHeight = () => 0.35 + (state.tilt - 8) / 72 * 1.6;
+function gyroCamera(){
+  if (!gyroOn || !devOk) return;
+  if (yaw0 === null) { _eul.setFromQuaternion(devQ, 'YXZ'); yaw0 = _eul.y; }   /* where the phone points now becomes "forward" */
+  _qg.setFromAxisAngle(UP, -yaw0).multiply(devQ);
+  camera.quaternion.slerp(_qg, 0.55);
+  camera.position.set(0, camHeight(), 2.6);
+  camera.updateMatrixWorld();
+}
+/* new characters appear where the phone is pointing */
+function spawnSpot(){
+  if (gyroOn) {
+    const f = floorPoint(innerWidth / 2, innerHeight * 0.62);
+    if (f && f.distanceTo(camera.position) < 7) return { x: f.x + (Math.random() - 0.5) * 0.4, z: f.z + (Math.random() - 0.5) * 0.3 };
+  }
+  return freeSpot();
+}
+
 /* ---------- scene of living entities (camera mode) ---------- */
 const entities = []; let selected = null;
 const hint = t => { $('camHint').textContent = t; };
@@ -611,7 +659,7 @@ async function addEntity(a){
   const g = new THREE.Group(), yg = new THREE.Group(); g.add(yg); yg.add(m); entGroup.add(g);
   const blob = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: getBlobTex(), transparent: true, depthWrite: false, opacity: 0.5 }));
   blob.renderOrder = -1; entGroup.add(blob);
-  const sp = freeSpot();
+  const sp = spawnSpot();
   const e = { a, g, yg, m, h, w, sx: sz.x, sz: sz.z, blob, fly: !!a.fly, quad: !!a.quad, yawOff: a.yaw || 0,
     x: sp.x, y: 0, z: sp.z, rotY: -(a.yaw || 0), scale: 1, vx: 0, vy: 0, vz: 0, mode: 'floor',
     lostT: 0, palmT: 0, pokeCD: 0, waveCD: 1.5, reactT: 0, turning: false, goal: null,
@@ -853,7 +901,7 @@ function updateEntities(dt, time){
       } else if (Math.abs(e.vx) + Math.abs(e.vz) > 0.01) {         /* slide to a stop */
         e.x += e.vx * dt; e.z += e.vz * dt; const f = Math.pow(0.004, dt); e.vx *= f; e.vz *= f;
       }
-      e.x = clamp(e.x, -6, 6); e.z = clamp(e.z, -8, 2.6);
+      e.x = clamp(e.x, -12, 12); e.z = clamp(e.z, -12, 12);
     }
     /* sway: a spring on lean angles gives overshoot and settle (secondary motion) */
     let ttx = 0, ttz = 0;
@@ -951,6 +999,7 @@ function loop(){
   raf = requestAnimationFrame(loop);
   const dt = Math.min(clock.getDelta(), 0.05), time = clock.elapsedTime;
   if (handsOn) detectHand();
+  gyroCamera();
   estimateLight(dt);
   updateEntities(dt, time);
   drawOcclusion();
@@ -997,7 +1046,7 @@ function renderCamTray(){
   }
 }
 async function openCam(withHands = false){
-  initThree();
+  initThree(); initGyro(); if (gyroAvail) setGyro(true);
   handsOn = withHands; $('handTip').hidden = !withHands; tip('أدخل يدك أمام الكاميرا');
   if (withHands) initHands().catch(() => tip('تعذّر تحميل تتبّع اليد. تحقق من الإنترنت وأعد المحاولة.'));
   $('studio').hidden = true; camEl.hidden = false; camActive = true;
@@ -1029,9 +1078,13 @@ $('goHands').addEventListener('click', () => openCam(true));
 $('camBack').addEventListener('click', closeCam);
 $('camReset').addEventListener('click', () => {
   while (entities.length) removeEntity(entities[0]);
-  state.tilt = 32; $('tilt').value = 32; placeCamera(); addEntity(current);
+  state.tilt = 32; $('tilt').value = 32; yaw0 = null; if (!gyroOn) placeCamera(); addEntity(current);
 });
-$('tilt').addEventListener('input', e => { state.tilt = +e.target.value; placeCamera(); });
+$('tilt').addEventListener('input', e => { state.tilt = +e.target.value; if (!gyroOn) placeCamera(); });
+$('camAnchor').addEventListener('click', () => {
+  if (!gyroAvail) { toast('مستشعر الدوران غير متاح في هذا المتصفح', 2200); return; }
+  setGyro(!gyroOn); toast(gyroOn ? 'مثبّت: لفّ الجوال، والمجسّمات تبقى مكانها' : 'أُلغي التثبيت', 1800);
+});
 const delSelected = () => { if (!selected) { toast('اضغط على مجسّم في المشهد أولاً', 1600); return; } const n = selected.a.name; removeEntity(selected); entDelT = 0; toast('حُذف ' + n + ' من المشهد', 1400); };
 $('camDelete').addEventListener('click', delSelected);
 $('entDel').addEventListener('click', delSelected);
@@ -1057,7 +1110,7 @@ gl.addEventListener('pointermove', e => {
   pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (!g0 || !entities.includes(g0.e)) return;
   const p = [...pts.values()], en = g0.e;
-  if (g0.mode === 1 && p.length === 1) { const f = floorPoint(p[0].x, p[0].y); if (f) { en.x = clamp(f.x + g0.off.x, -6, 6); en.z = clamp(f.z + g0.off.z, -8, 2.6); } }
+  if (g0.mode === 1 && p.length === 1) { const f = floorPoint(p[0].x, p[0].y); if (f) { en.x = clamp(f.x + g0.off.x, -12, 12); en.z = clamp(f.z + g0.off.z, -12, 12); } }
   if (g0.mode === 2 && p.length >= 2) { const [a, b] = p; en.scale = clamp(g0.s * Math.hypot(b.x - a.x, b.y - a.y) / g0.d, 0.15, 8); en.rotY = g0.r - (Math.atan2(b.y - a.y, b.x - a.x) - g0.ang); }
 });
 const end = e => { pts.delete(e.pointerId); gestureStart(); };
