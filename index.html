@@ -96,8 +96,12 @@ model-viewer{width:100%;height:100%;--poster-color:transparent;background:transp
 .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .actions .wide{grid-column:1/-1}
 #hands{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-.hand-tip{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(var(--safe-b) + 128px);max-width:calc(100% - 32px);width:max-content;text-align:center;font-size:13px;line-height:1.6;padding:8px 14px;border-radius:14px;color:#f2efe9}
+.hand-tip{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(var(--safe-b) + 176px);max-width:calc(100% - 32px);width:max-content;text-align:center;font-size:13px;line-height:1.6;padding:8px 14px;border-radius:14px;color:#f2efe9}
 .hand-tip b{color:var(--accent);font-weight:600}
+.cam-tray{position:absolute;left:0;right:0;bottom:calc(var(--safe-b) + 120px);display:flex;gap:8px;overflow-x:auto;padding:0 max(16px,env(safe-area-inset-right,0px)) 0 max(16px,env(safe-area-inset-left,0px));scrollbar-width:none}
+.cam-tray::-webkit-scrollbar{display:none}
+.cam-tray .chip{height:34px;font-size:13px;background:rgba(10,12,15,.55);border-color:rgba(255,255,255,.14);color:#f2efe9;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.cam-top .hint{max-width:calc(100% - 120px);text-align:center}
 #xrUI{position:fixed;inset:0;z-index:30;touch-action:none;background:transparent}
 #xrUI.clean .xr-ctl{opacity:0;pointer-events:none}
 .xr-bottom{position:absolute;left:0;right:0;bottom:calc(var(--safe-b) + 28px);display:flex;justify-content:center;align-items:center;gap:12px;padding:0 16px}
@@ -161,8 +165,8 @@ model-viewer{width:100%;height:100%;--poster-color:transparent;background:transp
     <button class="round glass" id="camBack" aria-label="رجوع">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
     </button>
-    <div class="hint glass" id="camHint">اسحب لتحريكه · إصبعان للتكبير والتدوير</div>
-    <button class="round glass" id="camReset" aria-label="إعادة الضبط">
+    <div class="hint glass" id="camHint">اضغط مجسّماً لتختاره · اسحبه لتحريكه</div>
+    <button class="round glass" id="camReset" aria-label="ابدأ المشهد من جديد">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4"/></svg>
     </button>
   </div>
@@ -172,10 +176,11 @@ model-viewer{width:100%;height:100%;--poster-color:transparent;background:transp
     <input type="range" id="tilt" min="8" max="80" value="32" aria-label="زاوية الأرض">
   </div>
 
+  <div class="cam-tray" id="camTray" aria-label="أضف إلى المشهد"></div>
   <div class="cam-bottom">
     <div class="side start">
-      <button class="round glass" id="camSwitch" aria-label="المجسّم التالي">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/></svg>
+      <button class="round glass" id="camDelete" aria-label="احذف المجسّم المختار">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg>
       </button>
     </div>
     <button class="shutter" id="shutter" aria-label="التقاط"><i></i></button>
@@ -262,6 +267,7 @@ model-viewer{width:100%;height:100%;--poster-color:transparent;background:transp
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { clone as skClone } from 'three/addons/utils/SkeletonUtils.js';
 
 /* ---------- helpers ---------- */
 const $ = id => document.getElementById(id);
@@ -290,15 +296,19 @@ const idb = (() => {
 
 /* ---------- assets ---------- */
 const CDN = 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/';
+const TJS = 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/models/gltf/';
+/* size: largest dimension in metres · yaw: which way the model faces · quad: four-legged (can be ridden) · fly: hovers */
 const LIBRARY = [
-  { id: 'fox', name: 'ثعلب', url: CDN + 'Fox/glTF-Binary/Fox.glb' },
-  { id: 'chair', name: 'كرسي', url: CDN + 'SheenChair/glTF-Binary/SheenChair.glb' },
-  { id: 'helmet', name: 'خوذة', url: CDN + 'DamagedHelmet/glTF-Binary/DamagedHelmet.glb' },
-  { id: 'lantern', name: 'فانوس', url: CDN + 'Lantern/glTF-Binary/Lantern.glb' },
-  { id: 'boombox', name: 'مسجّل', url: CDN + 'BoomBox/glTF-Binary/BoomBox.glb' },
-  { id: 'car', name: 'سيارة لعبة', url: CDN + 'ToyCar/glTF-Binary/ToyCar.glb' },
-  { id: 'duck', name: 'بطة', url: CDN + 'Duck/glTF-Binary/Duck.glb' },
-  { id: 'avocado', name: 'أفوكادو', url: CDN + 'Avocado/glTF-Binary/Avocado.glb' }
+  { id: 'soldier', name: 'جندي', url: TJS + 'Soldier.glb', size: 1.1, yaw: Math.PI },
+  { id: 'robot', name: 'روبوت', url: TJS + 'RobotExpressive/RobotExpressive.glb', size: 0.95 },
+  { id: 'xbot', name: 'إنسان آلي', url: TJS + 'Xbot.glb', size: 1.1 },
+  { id: 'horse', name: 'حصان', url: TJS + 'Horse.glb', size: 1.6, quad: true },
+  { id: 'fox', name: 'ثعلب', url: CDN + 'Fox/glTF-Binary/Fox.glb', size: 0.85, quad: true },
+  { id: 'parrot', name: 'ببغاء', url: TJS + 'Parrot.glb', size: 0.4, fly: true },
+  { id: 'flamingo', name: 'فلامنغو', url: TJS + 'Flamingo.glb', size: 0.7, fly: true },
+  { id: 'stork', name: 'لقلق', url: TJS + 'Stork.glb', size: 0.7, fly: true },
+  { id: 'chair', name: 'كرسي', url: CDN + 'SheenChair/glTF-Binary/SheenChair.glb', size: 0.9, back: 0.5 },
+  { id: 'lantern', name: 'فانوس', url: CDN + 'Lantern/glTF-Binary/Lantern.glb', size: 0.6 }
 ];
 let assets = [...LIBRARY];
 let current = assets[0];
@@ -308,7 +318,7 @@ async function loadUserModels(){
     const recs = await idb.all();
     for (const r of recs || []) {
       const url = r.blob ? URL.createObjectURL(r.blob) : r.url;
-      assets.push({ id: r.id, name: r.name, url, mine: true });
+      assets.push({ id: r.id, name: r.name, url, mine: true, size: 1 });
     }
   } catch {}
 }
@@ -343,7 +353,7 @@ function select(a){
   $('mvLoading').hidden = false; $('mvLoading').textContent = 'جارٍ تحميل المجسّم…';
   mv.src = a.url;
   store.set('last', a.id);
-  if (camActive || xrMode) loadIntoScene(a);
+  if (xrMode) loadIntoScene(a);
   if (xrMode) $('xrName').textContent = a.name;
 }
 mv.addEventListener('load', () => { $('mvLoading').hidden = true; updateARNote(); });
@@ -376,18 +386,20 @@ $('glbFile').addEventListener('change', async e => {
   const id = 'u' + Date.now();
   const name = f.name.replace(/\.(glb|gltf)$/i, '').slice(0, 24);
   await idb.put({ id, name, blob: f }).catch(() => {});
-  const a = { id, name, url: URL.createObjectURL(f), mine: true };
+  const a = { id, name, url: URL.createObjectURL(f), mine: true, size: 1 };
   assets.push(a); select(a); toast('أُضيف ' + name);
 });
 
 /* ---------- camera compositor ---------- */
-let camActive = false, stream = null, renderer, scene, camera, holder, ground, mixer, clock, raf, sun, reticle;
+let camActive = false, stream = null, renderer, scene, camera, holder, ground, mixer, clock, raf, sun, reticle, entGroup, selRing;
 let xrMode = false, xrSupported = false, hitSource = null;
-let baseH = 1, idleA = null, moveA = null, curA = null;
 const hctx = $('hands').getContext('2d');
 const loader = new GLTFLoader(); loader.setCrossOrigin('anonymous');
 const camEl = $('cam'), video = $('video'), gl = $('gl');
-const state = { tilt: 32, scale: 1, rotY: 0, x: 0, y: 0, z: 0 };
+const state = { tilt: 32, scale: 1, rotY: 0 };   /* tilt: camera mode · scale/rotY: AR mode model */
+const UP = new THREE.Vector3(0, 1, 0);
+const wrap = a => { a = (a + Math.PI) % (Math.PI * 2); return (a < 0 ? a + Math.PI * 2 : a) - Math.PI; };
+const clamp = THREE.MathUtils.clamp;
 
 function initThree(){
   if (renderer) return;
@@ -409,6 +421,9 @@ function initThree(){
   ground = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.ShadowMaterial({ opacity: 0.38 }));
   ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
   holder = new THREE.Group(); scene.add(holder);
+  entGroup = new THREE.Group(); scene.add(entGroup);
+  selRing = new THREE.Mesh(new THREE.RingGeometry(0.44, 0.5, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xf0b44c, transparent: true, opacity: 0.75, depthWrite: false }));
+  selRing.visible = false; scene.add(selRing);
   clock = new THREE.Clock();
   addEventListener('resize', resize);
 }
@@ -419,109 +434,390 @@ function resize(){
   const hc = $('hands'), dpr = Math.min(devicePixelRatio, 2); hc.width = w * dpr; hc.height = h * dpr; hctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 function placeCamera(){
-  const t = THREE.MathUtils.degToRad(state.tilt), D = 3.2;
+  const t = THREE.MathUtils.degToRad(state.tilt), D = 3.4;
   camera.position.set(0, D * Math.sin(t), D * Math.cos(t));
-  camera.lookAt(0, 0.35, 0); camera.updateProjectionMatrix();
+  camera.lookAt(0, 0.4, 0); camera.updateProjectionMatrix();
 }
-function applyTransform(){ if (!xrMode) holder.position.set(state.x, state.y, state.z); holder.scale.setScalar(state.scale); holder.rotation.y = state.rotY; }
+function applyTransform(){ holder.scale.setScalar(state.scale); holder.rotation.y = state.rotY; }
 
+/* model loading shared by both modes */
+const gltfCache = new Map();
+const getGLTF = url => { if (!gltfCache.has(url)) gltfCache.set(url, loader.loadAsync(url).catch(e => { gltfCache.delete(url); throw e; })); return gltfCache.get(url); };
+function prepModel(gltf, a){
+  const m = skClone(gltf.scene);
+  m.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+  const s0 = new THREE.Box3().setFromObject(m).getSize(new THREE.Vector3());
+  m.scale.multiplyScalar((a.size || 1) / Math.max(s0.x, s0.y, s0.z, 1e-6));
+  m.updateMatrixWorld(true);
+  const b = new THREE.Box3().setFromObject(m), c = b.getCenter(new THREE.Vector3()), s = b.getSize(new THREE.Vector3());
+  m.position.x -= c.x; m.position.z -= c.z; m.position.y -= b.min.y;
+  return { m, h: s.y, w: Math.max(s.x, s.z) };
+}
+
+/* AR mode: one model on the real floor */
 let loadToken = 0;
 function loadIntoScene(a){
   const tok = ++loadToken;
-  $('camHint').textContent = 'جارٍ تحميل ' + a.name + '…';
-  loader.load(a.url, gltf => {
+  getGLTF(a.url).then(gltf => {
     if (tok !== loadToken) return;
     holder.clear(); mixer = null;
-    const m = gltf.scene;
-    m.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
-    const box = new THREE.Box3().setFromObject(m), size = box.getSize(new THREE.Vector3());
-    const k = 1.1 / Math.max(size.x, size.y, size.z, 1e-6);
-    m.scale.setScalar(k);
-    const b2 = new THREE.Box3().setFromObject(m), c = b2.getCenter(new THREE.Vector3());
-    m.position.x -= c.x; m.position.z -= c.z; m.position.y -= b2.min.y;
-    holder.add(m);
-    baseH = b2.max.y - b2.min.y; state.y = 0; phys.mode = 'floor'; phys.vy = 0;
-    idleA = moveA = curA = null;
-    if (gltf.animations?.length) {
-      mixer = new THREE.AnimationMixer(m);
-      const acts = gltf.animations.map(c => mixer.clipAction(c));
-      idleA = acts.find(a => /idle|survey|stand/i.test(a.getClip().name)) || acts[0];
-      moveA = acts.find(a => /run|walk|jump/i.test(a.getClip().name)) || null;
-      idleA.play(); curA = idleA;
+    holder.add(prepModel(gltf, a).m);
+    if (gltf.animations.length) {
+      mixer = new THREE.AnimationMixer(holder.children[0]);
+      const c = gltf.animations.find(c => /idle|survey|flap|fly/i.test(c.name)) || gltf.animations[0];
+      mixer.clipAction(c).play();
     }
-    $('camHint').textContent = 'اسحب لتحريكه · إصبعان للتكبير والتدوير';
-  }, undefined, () => { if (tok === loadToken) $('camHint').textContent = 'تعذّر تحميل المجسّم'; });
+  }).catch(() => { if (tok === loadToken) $('xrHint').textContent = 'تعذّر تحميل ' + a.name; });
+}
+
+/* ---------- scene of living entities (camera mode) ---------- */
+const entities = []; let selected = null;
+const hint = t => { $('camHint').textContent = t; };
+const DEF_HINT = 'اضغط مجسّماً لتختاره · اسحبه لتحريكه · إصبعان للتكبير';
+const isAncestor = (a, b) => { for (let p = b.parent; p; p = p.parent) if (p === a) return true; return false; };
+function freeSpot(){
+  let best = { x: 0, z: 0 }, bd = -1;
+  for (let i = 0; i < 14; i++) {
+    const p = { x: (Math.random() * 2 - 1) * 1.0, z: (Math.random() * 2 - 1) * 0.5 };
+    const d = entities.length ? Math.min(...entities.map(e => Math.hypot(e.x - p.x, e.z - p.z))) : 9 - Math.hypot(p.x, p.z);
+    if (d > bd) { bd = d; best = p; }
+  }
+  return best;
+}
+async function addEntity(a){
+  if (entities.length >= 5) { toast('المشهد يتسع لخمسة مجسّمات. احذف واحداً أولاً.'); return null; }
+  hint('جارٍ تحميل ' + a.name + '…');
+  let gltf; try { gltf = await getGLTF(a.url); } catch { hint('تعذّر تحميل ' + a.name); return null; }
+  const { m, h, w } = prepModel(gltf, a);
+  const g = new THREE.Group(); g.add(m); entGroup.add(g);
+  const sp = freeSpot();
+  const e = { a, g, m, h, w, fly: !!a.fly, quad: !!a.quad, yawOff: a.yaw || 0,
+    x: sp.x, y: 0, z: sp.z, rotY: -(a.yaw || 0), scale: 1, vy: 0, spin: 0, mode: 'floor',
+    lostT: 0, palmT: 0, pokeCD: 0, waveCD: 1.5, reactT: 0, turning: false,
+    ride: null, rideOff: null, rideRot: 0, lookYaw: 0, lookPitch: 0,
+    hover: 0.6 + Math.random() * 0.35, bob: Math.random() * 6,
+    mixer: null, acts: {}, cur: null, once: null, head: null, neck: null, headBase: null, neckBase: null };
+  if (e.fly) e.y = e.hover;
+  m.traverse(o => {
+    if (!o.isBone) return;
+    if (!e.head && /head/i.test(o.name) && !/end|top|nub|tip|front/i.test(o.name)) e.head = o;
+    if (!e.neck && /neck/i.test(o.name) && !/end/i.test(o.name)) e.neck = o;
+  });
+  if (e.neck && e.head && !isAncestor(e.neck, e.head)) e.neck = null;
+  if (gltf.animations.length) {
+    e.mixer = new THREE.AnimationMixer(m);
+    const find = re => { const c = gltf.animations.find(c => re.test(c.name)); return c ? e.mixer.clipAction(c) : null; };
+    e.acts.idle = find(/^(idle|survey|breath)/i) || find(/idle/i);
+    e.acts.walk = find(/walk(?!jump)/i);
+    e.acts.run = find(/run|gallop/i) || e.acts.walk;
+    e.acts.jump = find(/^jump|walkjump/i);
+    e.acts.wave = find(/wave/i);
+    e.acts.happy = find(/^yes|thumbs|dance/i);
+    if (e.fly) e.acts.idle = find(/fly|flap/i) || e.acts.idle || e.mixer.clipAction(gltf.animations[0]);
+    if (!e.acts.idle && !e.acts.run) e.acts.idle = e.mixer.clipAction(gltf.animations[0]);
+    e.mixer.addEventListener('finished', ev => {
+      if (ev.action !== e.once) return;
+      ev.action.fadeOut(0.3); e.once = null; e.cur = null; setBase(e);
+    });
+  }
+  entities.push(e); selected = e; setBase(e); hint(DEF_HINT);
+  return e;
+}
+function removeEntity(e){
+  if (!e) return;
+  entGroup.remove(e.g); entities.splice(entities.indexOf(e), 1);
+  for (const r of entities) if (r.ride === e) { r.ride = null; r.mode = 'air'; r.vy = 0; }
+  selected = entities[entities.length - 1] || null;
+}
+function setBase(e){
+  if (!e.mixer || e.once) return;
+  const moving = e.mode === 'air' || e.mode === 'grab' || Math.abs(e.spin) > 0.5 || e.turning || e.reactT > 0;
+  const want = e.fly ? e.acts.idle : moving ? (e.acts.run || e.acts.idle) : e.acts.idle;
+  if (want === e.cur) return;
+  if (want) { want.reset(); want.setLoop(THREE.LoopRepeat); want.fadeIn(0.25).play(); }
+  e.cur?.fadeOut(0.25); e.cur = want;
+}
+function playOnce(e, act){
+  if (!act || e.once || !e.mixer) return false;
+  act.reset(); act.setLoop(THREE.LoopOnce, 1); act.clampWhenFinished = false; act.fadeIn(0.2).play();
+  if (e.cur && e.cur !== act) e.cur.fadeOut(0.2);
+  e.once = act; e.cur = act; return true;
+}
+const backH = o => o.h * o.scale * (o.a.back ?? (o.quad ? 0.68 : 0.95));
+function supportUnder(e){
+  let best = { h: 0, o: null };
+  for (const o of entities) {
+    if (o === e || o.fly || o.ride === e) continue;
+    if (Math.hypot(e.x - o.x, e.z - o.z) < o.w * o.scale * 0.5) { const h = o.y + backH(o); if (h > best.h) best = { h, o }; }
+  }
+  return best;
+}
+let mountMsgT = 0, mountMsg = '';
+function mount(e, o){
+  e.mode = 'ride'; e.ride = o; e.vy = 0; e.spin = 0;
+  const dx = (e.x - o.x) / o.scale, dz = (e.z - o.z) / o.scale, c = Math.cos(o.rotY), s = Math.sin(o.rotY);
+  e.rideOff = { x: (dx * c - dz * s) * 0.5, z: (dx * s + dz * c) * 0.5 };
+  e.rideRot = wrap(e.rotY - o.rotY);
+  if (!playOnce(o, o.acts.jump)) o.reactT = 0.9;
+  o.spin += (Math.random() < 0.5 ? -1 : 1) * 1.5;
+  playOnce(e, e.acts.happy || e.acts.wave);
+  mountMsg = e.a.name + ' ركب على ' + o.a.name; mountMsgT = 2.5;
+}
+function grabStart(e, mode){
+  e.mode = mode; e.ride = null; e.palmT = 0; e.lostT = 0; e.vy = 0; selected = e;
+  if (mode === 'hand') playOnce(e, e.acts.happy);
+}
+function release(e){ e.mode = e.fly ? 'floor' : 'air'; e.vy = 0; e.lostT = 0; }
+function poke(e){
+  e.pokeCD = 0.9; e.spin = (Math.random() < 0.5 ? -1 : 1) * (e.fly ? 5 : 7);
+  if (e.fly) { e.vy = 1.4; return; }
+  e.vy = 3.2; e.mode = 'air'; e.ride = null; playOnce(e, e.acts.jump);
+}
+
+/* screen-space box around an entity, for touching it with a finger or hand */
+const _v = new THREE.Vector3();
+function rectOf(e){
+  const R = e.w * e.scale * 0.5, H = e.h * e.scale;
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (let i = 0; i < 8; i++) {
+    _v.set(e.x + (i & 1 ? R : -R), e.y + (i & 2 ? H : 0), e.z + (i & 4 ? R : -R)).project(camera);
+    const x = (_v.x + 1) / 2 * innerWidth, y = (1 - _v.y) / 2 * innerHeight;
+    x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+  }
+  const px = (x1 - x0) * 0.12, py = (y1 - y0) * 0.12;
+  return { x0: x0 - px, x1: x1 + px, y0: y0 - py, y1: y1 + py };
+}
+function entityAt(q, pad = 0){
+  let best = null, ba = 1e12;
+  for (const e of entities) {
+    const r = rectOf(e), px = (r.x1 - r.x0) * pad, py = (r.y1 - r.y0) * pad;
+    if (q.x > r.x0 - px && q.x < r.x1 + px && q.y > r.y0 - py && q.y < r.y1 + py) {
+      const ar = (r.x1 - r.x0) * (r.y1 - r.y0); if (ar < ba) { ba = ar; best = e; }
+    }
+  }
+  return best;
+}
+const ray = new THREE.Raycaster(), floor = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit = new THREE.Vector3();
+const _plane = new THREE.Plane(), _n = new THREE.Vector3();
+function worldAt(sx, sy, depthPt){
+  camera.getWorldDirection(_n); _plane.setFromNormalAndCoplanarPoint(_n.negate(), depthPt);
+  ray.setFromCamera({ x: sx / innerWidth * 2 - 1, y: -(sy / innerHeight) * 2 + 1 }, camera);
+  return ray.ray.intersectPlane(_plane, new THREE.Vector3());
+}
+function follow(e, q, lift, rate, dt){
+  const t = worldAt(q.x, q.y, _v.set(e.x, e.y, e.z)); if (!t) return;
+  const k = Math.min(1, dt * rate);
+  e.x += (t.x - e.x) * k; e.z += (t.z - e.z) * k; e.y += (Math.max(0, t.y - lift) - e.y) * k;
+}
+
+let handSeenT = 0, tipText = '';
+function tip(t){ if (t !== tipText) { tipText = t; $('handTip').innerHTML = t; } }
+function updateEntities(dt, time){
+  let held = entities.find(e => e.mode === 'hand' || e.mode === 'grab');
+  if (handsOn && landmarker) {
+    handSeenT = hand ? handSeenT + dt : 0;
+    if (hand && handSeenT > 0.25 && handSeenT - dt <= 0.25)       /* greet a hand the moment it appears */
+      for (const e of entities) if (e.acts.wave && e.waveCD <= 0 && e.mode !== 'ride') { playOnce(e, e.acts.wave); e.waveCD = 6; }
+    if (hand && !held) {
+      const pe = hand.pinch ? entityAt(hand.pinchPt) : null;
+      if (pe) { grabStart(pe, 'grab'); held = pe; }
+      else if (hand.open) {
+        const cand = entityAt(hand.palm, 0.1) || entities.find(e => e.fly && e.mode === 'floor');
+        for (const o of entities) if (o !== cand) o.palmT = 0;
+        if (cand) { cand.palmT += dt; if (cand.palmT > (cand.fly ? 0.7 : 0.45)) { grabStart(cand, 'hand'); held = cand; } }
+      } else {
+        for (const o of entities) o.palmT = 0;
+        const pk = !hand.pinch ? entityAt(hand.tip, -0.05) : null;
+        if (pk && pk.pokeCD <= 0 && pk.mode !== 'air') poke(pk);
+      }
+    }
+    if (held) {
+      if (held.mode === 'hand') {
+        if (!hand || hand.fist) { held.lostT += dt; if (held.lostT > 0.3) { release(held); held = null; } }
+        else { held.lostT = 0; follow(held, hand.palm, held.fly ? -0.04 : 0, held.fly ? 3.5 : 14, dt); }
+      } else {
+        if (!hand || !hand.pinch) { held.lostT += dt; if (held.lostT > 0.2) { release(held); held = null; } }
+        else { held.lostT = 0; follow(held, hand.pinchPt, held.h * held.scale * 0.85, 14, dt); }
+      }
+    }
+    if (mountMsgT > 0) { mountMsgT -= dt; tip(mountMsg + '!'); }
+    else if (held?.mode === 'hand') tip(held.fly ? held.a.name + ' على كفّك! <b>اقبض يدك</b> ليطير' : 'على كفّك! حرّكه فوق مجسّم آخر ثم <b>اقبض يدك</b> ليركبه');
+    else if (held?.mode === 'grab') tip('ممسوك! ضعه فوق مجسّم آخر و<b>افتح أصابعك</b> ليركبه');
+    else if (hand) tip('<b>المسه</b> ليقفز · <b>افتح كفّك</b> عنده ليصعد عليها · <b>اقرصه</b> لتحمله');
+    else tip('أدخل يدك أمام الكاميرا');
+  } else if (mountMsgT > 0) { mountMsgT -= dt; hint(mountMsg); if (mountMsgT <= 0) hint(DEF_HINT); }
+
+  for (const e of entities) {
+    e.pokeCD -= dt; e.waveCD -= dt; if (e.reactT > 0) e.reactT -= dt;
+    if (e === held) { /* follows the hand */ }
+    else if (e.mode === 'ride') {
+      const o = e.ride;
+      if (!o || !entities.includes(o)) { e.mode = 'air'; e.ride = null; }
+      else {
+        const c = Math.cos(o.rotY), s = Math.sin(o.rotY), ox = e.rideOff.x * o.scale, oz = e.rideOff.z * o.scale;
+        e.x = o.x + ox * c + oz * s; e.z = o.z - ox * s + oz * c; e.y = o.y + backH(o); e.rotY = o.rotY + e.rideRot;
+      }
+    } else if (e.fly) {
+      e.y += e.vy * dt; e.vy *= Math.pow(0.08, dt);
+      e.y += (e.hover + Math.sin(time * 2.2 + e.bob) * 0.06 - e.y) * Math.min(1, dt * 2);
+      e.mode = 'floor';
+    } else {
+      const sup = supportUnder(e);
+      if (e.mode === 'air' || e.y > 0.001) {
+        e.mode = 'air'; e.vy -= 9.8 * dt; e.y += e.vy * dt;
+        if (e.y <= sup.h) {
+          if (sup.o && sup.h > 0.02) mount(e, sup.o);
+          else { e.y = 0; if (e.vy < -1.6) e.vy = -e.vy * 0.32; else { e.vy = 0; e.mode = 'floor'; } }
+        }
+      }
+    }
+    if (e.spin) { e.rotY += e.spin * dt; e.spin *= Math.pow(0.04, dt); if (Math.abs(e.spin) < 0.05) e.spin = 0; }
+  }
+}
+
+/* heads (and bodies) turn toward the hand, the camera, or the nearest neighbour */
+const _q = new THREE.Quaternion(), _qp = new THREE.Quaternion(), _qy = new THREE.Quaternion(), _R = new THREE.Quaternion(), _t = new THREE.Quaternion();
+const _f = new THREE.Vector3(), _ax = new THREE.Vector3(), _c = new THREE.Vector3(), _o = new THREE.Vector3();
+function rotateBoneWorld(bone, R, w){
+  _q.identity().slerp(R, w);
+  bone.parent.getWorldQuaternion(_qp);
+  _t.copy(_qp).invert().multiply(_q).multiply(_qp);
+  bone.quaternion.premultiply(_t);
+  bone.updateMatrixWorld(true);
+}
+function lookStep(e, dt){
+  let T = null;
+  const H = e.h * e.scale;
+  if (e.mode === 'hand' || e.mode === 'grab') T = camera.position;
+  else if (handsOn && hand) T = worldAt(hand.open ? hand.palm.x : hand.tip.x, hand.open ? hand.palm.y : hand.tip.y, _c.set(e.x, e.y + H * 0.9, e.z));
+  else {
+    let bd = 2.2;
+    for (const o of entities) {
+      if (o === e || o === e.ride || o.ride === e) continue;
+      const d = Math.hypot(o.x - e.x, o.z - e.z);
+      if (d < bd) { bd = d; T = _o.set(o.x, o.y + o.h * o.scale * 0.8, o.z); }
+    }
+  }
+  let yawT = 0, pitchT = 0; e.turning = false;
+  if (T) {
+    const dx = T.x - e.x, dz = T.z - e.z, dy = T.y - (e.y + H * 0.9), ang = Math.atan2(dx, dz);
+    let d = wrap(ang - (e.rotY + e.yawOff));
+    const free = e.mode === 'floor' && !e.once;
+    if (e.fly && free) e.rotY += d * Math.min(1, dt * 2.5);
+    else if (free && Math.abs(d) > 0.9) { e.rotY += Math.sign(d) * Math.min(Math.abs(d) - 0.5, (e.quad ? 1.5 : 2.6) * dt); e.turning = true; }
+    d = wrap(ang - (e.rotY + e.yawOff));
+    yawT = clamp(d, -1.15, 1.15);
+    pitchT = clamp(Math.atan2(dy, Math.hypot(dx, dz)), -0.5, 0.6);
+  }
+  const k = Math.min(1, dt * 7);
+  e.lookYaw += (yawT - e.lookYaw) * k; e.lookPitch += (pitchT - e.lookPitch) * k;
+  if (!e.head) return;
+  const fy = e.rotY + e.yawOff + e.lookYaw;
+  _f.set(Math.sin(fy), 0, Math.cos(fy)); _ax.crossVectors(_f, UP).normalize();
+  _qy.setFromAxisAngle(UP, e.lookYaw); _R.setFromAxisAngle(_ax, e.lookPitch).multiply(_qy);
+  if (e.neck) { rotateBoneWorld(e.neck, _R, 0.4); rotateBoneWorld(e.head, _R, 0.6); }
+  else rotateBoneWorld(e.head, _R, 1);
 }
 
 function loop(){
   raf = requestAnimationFrame(loop);
-  const dt = Math.min(clock.getDelta(), 0.05);
-  if (handsOn) handStep(dt);
-  applyTransform();
-  if (mixer) mixer.update(dt);
+  const dt = Math.min(clock.getDelta(), 0.05), time = clock.elapsedTime;
+  if (handsOn) detectHand();
+  updateEntities(dt, time);
+  for (const e of entities) {
+    e.g.position.set(e.x, e.y, e.z); e.g.rotation.y = e.rotY; e.g.scale.setScalar(e.scale);
+    if (e.headBase) e.head.quaternion.copy(e.headBase);
+    if (e.neckBase) e.neck.quaternion.copy(e.neckBase);
+    setBase(e);
+    e.mixer?.update(dt);
+    if (e.head) { (e.headBase ||= new THREE.Quaternion()).copy(e.head.quaternion); if (e.neck) (e.neckBase ||= new THREE.Quaternion()).copy(e.neck.quaternion); }
+  }
+  entGroup.updateMatrixWorld(true);
+  for (const e of entities) lookStep(e, dt);
+  if (selected && entities.length > 1 && selected.mode !== 'hand' && selected.mode !== 'grab') {
+    selRing.visible = true; selRing.position.set(selected.x, (selected.mode === 'ride' ? selected.y : 0) + 0.004, selected.z);
+    selRing.scale.setScalar(Math.max(0.3, selected.w * selected.scale * 0.6 / 0.47));
+  } else selRing.visible = false;
   renderer.render(scene, camera);
 }
 
+function renderCamTray(){
+  const t = $('camTray'); t.innerHTML = '';
+  for (const a of assets) {
+    const b = document.createElement('button'); b.className = 'chip'; b.textContent = '+ ' + a.name;
+    b.addEventListener('click', () => addEntity(a));
+    t.append(b);
+  }
+}
 async function openCam(withHands = false){
   initThree();
-  handsOn = withHands; $('handTip').hidden = !withHands; $('handTip').textContent = 'أدخل يدك أمام الكاميرا';
-  if (withHands) initHands().catch(() => { $('handTip').textContent = 'تعذّر تحميل تتبّع اليد. تحقق من الإنترنت وأعد المحاولة.'; });
+  handsOn = withHands; $('handTip').hidden = !withHands; tip('أدخل يدك أمام الكاميرا');
+  if (withHands) initHands().catch(() => tip('تعذّر تحميل تتبّع اليد. تحقق من الإنترنت وأعد المحاولة.'));
   $('studio').hidden = true; camEl.hidden = false; camActive = true;
   $('camError').hidden = true;
-  resize(); applyTransform(); loadIntoScene(current);
+  holder.visible = false; entGroup.visible = true; ground.position.set(0, 0, 0);
+  resize(); renderCamTray();
+  if (!entities.length) addEntity(current);
   cancelAnimationFrame(raf); loop();
   try {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('nomedia');
-    stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+    stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } });
     video.srcObject = stream; await video.play().catch(() => {});
   } catch (err) {
-    const insecure = !isSecureContext;
-    $('camError').innerHTML = insecure
-      ? 'الكاميرا تحتاج رابطاً آمناً يبدأ بـ https.<br>ارفع التطبيق على استضافة مثل Netlify ثم افتحه من هناك.'
+    $('camError').innerHTML = !isSecureContext
+      ? 'الكاميرا تحتاج رابطاً آمناً يبدأ بـ https.'
       : 'لم يُسمح بالوصول إلى الكاميرا.<br>فعّل إذن الكاميرا لهذا الموقع من إعدادات المتصفح ثم أعد المحاولة.';
     $('camError').hidden = false;
   }
 }
 function closeCam(){
   camActive = false; cancelAnimationFrame(raf);
-  handsOn = false; hctx.clearRect(0, 0, innerWidth, innerHeight); state.y = 0; phys.mode = 'floor';
+  handsOn = false; hand = null; hctx.clearRect(0, 0, innerWidth, innerHeight);
+  for (const e of entities) if (e.mode === 'hand' || e.mode === 'grab') release(e);
   stream?.getTracks().forEach(t => t.stop()); stream = null; video.srcObject = null;
   camEl.hidden = true; $('studio').hidden = false;
 }
 $('goCam').addEventListener('click', () => xrSupported ? startXR() : openCam());
 $('goHands').addEventListener('click', () => openCam(true));
 $('camBack').addEventListener('click', closeCam);
-$('camReset').addEventListener('click', () => { Object.assign(state, { scale: 1, rotY: 0, x: 0, y: 0, z: 0, tilt: 32 }); phys.mode = 'floor'; phys.vy = 0; $('tilt').value = 32; placeCamera(); applyTransform(); });
+$('camReset').addEventListener('click', () => {
+  while (entities.length) removeEntity(entities[0]);
+  state.tilt = 32; $('tilt').value = 32; placeCamera(); addEntity(current);
+});
 $('tilt').addEventListener('input', e => { state.tilt = +e.target.value; placeCamera(); });
-$('camSwitch').addEventListener('click', () => { const i = assets.indexOf(current); select(assets[(i + 1) % assets.length]); toast(current.name, 1200); });
+$('camDelete').addEventListener('click', () => { if (selected) { const n = selected.a.name; removeEntity(selected); toast('حُذف ' + n, 1400); } });
 $('camShadow').addEventListener('click', e => { ground.visible = !ground.visible; e.currentTarget.setAttribute('aria-pressed', ground.visible); e.currentTarget.style.opacity = ground.visible ? 1 : .5; });
 
-/* gestures: one finger moves on the floor, two fingers scale + rotate */
+/* touch: tap to pick, one finger drags on the floor, two fingers scale + rotate */
 const pts = new Map(); let g0 = null;
-const ray = new THREE.Raycaster(), floor = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit = new THREE.Vector3();
 function floorPoint(x, y){
-  const r = gl.getBoundingClientRect();
-  ray.setFromCamera({ x: ((x - r.left) / r.width) * 2 - 1, y: -((y - r.top) / r.height) * 2 + 1 }, camera);
+  ray.setFromCamera({ x: x / innerWidth * 2 - 1, y: -(y / innerHeight) * 2 + 1 }, camera);
   return ray.ray.intersectPlane(floor, hit) ? hit.clone() : null;
 }
 function gestureStart(){
-  const p = [...pts.values()];
-  if (p.length === 1) { const f = floorPoint(p[0].x, p[0].y); g0 = f ? { mode: 1, off: new THREE.Vector3(state.x - f.x, 0, state.z - f.z) } : null; }
-  else if (p.length >= 2) { const [a, b] = p; g0 = { mode: 2, d: Math.hypot(b.x - a.x, b.y - a.y), ang: Math.atan2(b.y - a.y, b.x - a.x), s: state.scale, r: state.rotY }; }
+  const p = [...pts.values()]; g0 = null;
+  if (p.length === 1) {
+    const e = entityAt(p[0]); if (!e) return;
+    selected = e;
+    if (e.mode === 'ride') { e.mode = 'floor'; e.ride = null; e.y = 0; }
+    if (e.mode !== 'floor') return;
+    const f = floorPoint(p[0].x, p[0].y); if (f) g0 = { mode: 1, e, off: new THREE.Vector3(e.x - f.x, 0, e.z - f.z) };
+  } else if (p.length >= 2 && selected) {
+    const [a, b] = p; g0 = { mode: 2, e: selected, d: Math.hypot(b.x - a.x, b.y - a.y), ang: Math.atan2(b.y - a.y, b.x - a.x), s: selected.scale, r: selected.rotY };
+  }
 }
 gl.addEventListener('pointerdown', e => { gl.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); gestureStart(); });
 gl.addEventListener('pointermove', e => {
   if (!pts.has(e.pointerId)) return;
   pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (!g0) return;
-  const p = [...pts.values()];
-  if (g0.mode === 1 && p.length === 1) { const f = floorPoint(p[0].x, p[0].y); if (f) { state.x = THREE.MathUtils.clamp(f.x + g0.off.x, -6, 6); state.z = THREE.MathUtils.clamp(f.z + g0.off.z, -8, 2.4); } }
-  if (g0.mode === 2 && p.length >= 2) { const [a, b] = p; state.scale = THREE.MathUtils.clamp(g0.s * Math.hypot(b.x - a.x, b.y - a.y) / g0.d, 0.1, 12); state.rotY = g0.r - (Math.atan2(b.y - a.y, b.x - a.x) - g0.ang); }
-  applyTransform();
+  if (!g0 || !entities.includes(g0.e)) return;
+  const p = [...pts.values()], en = g0.e;
+  if (g0.mode === 1 && p.length === 1) { const f = floorPoint(p[0].x, p[0].y); if (f) { en.x = clamp(f.x + g0.off.x, -6, 6); en.z = clamp(f.z + g0.off.z, -8, 2.6); } }
+  if (g0.mode === 2 && p.length >= 2) { const [a, b] = p; en.scale = clamp(g0.s * Math.hypot(b.x - a.x, b.y - a.y) / g0.d, 0.15, 8); en.rotY = g0.r - (Math.atan2(b.y - a.y, b.x - a.x) - g0.ang); }
 });
 const end = e => { pts.delete(e.pointerId); gestureStart(); };
 gl.addEventListener('pointerup', end); gl.addEventListener('pointercancel', end);
-gl.addEventListener('wheel', e => { e.preventDefault(); state.scale = THREE.MathUtils.clamp(state.scale * (e.deltaY < 0 ? 1.08 : 0.93), 0.1, 12); applyTransform(); }, { passive: false });
+gl.addEventListener('wheel', e => { e.preventDefault(); if (selected) selected.scale = clamp(selected.scale * (e.deltaY < 0 ? 1.08 : 0.93), 0.15, 8); }, { passive: false });
 
 /* ---------- in-page AR with real floor tracking (Chrome on Android) ---------- */
 const xrUI = $('xrUI'); let xrSession = null, lastTwoFinger = 0;
@@ -540,8 +836,8 @@ async function startXR(){
   renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType('local');
   await renderer.xr.setSession(xrSession);
   hitSource = await xrSession.requestHitTestSource({ space: await xrSession.requestReferenceSpace('viewer') });
-  Object.assign(state, { scale: 0.6, rotY: 0 }); applyTransform();
-  holder.visible = false; ground.visible = false;
+  Object.assign(state, { scale: 1, rotY: 0 }); applyTransform();
+  holder.visible = false; ground.visible = false; entGroup.visible = false; selRing.visible = false;
   xrUI.hidden = false; xrUI.classList.remove('clean'); $('studio').hidden = true;
   $('xrHint').textContent = 'حرّك الجوال ببطء حتى تظهر الدائرة على الأرض';
   $('xrName').textContent = current.name;
@@ -574,7 +870,7 @@ function endXR(){
   hitSource = null; xrSession = null; xrMode = false;
   reticle.visible = false; holder.visible = true; ground.visible = true; ground.position.set(0, 0, 0);
   sun.position.set(1.5, 4, 2); sun.target.position.set(0, 0, 0);
-  Object.assign(state, { scale: 1, rotY: 0, x: 0, z: 0 }); applyTransform();
+  Object.assign(state, { scale: 1, rotY: 0 }); applyTransform(); entGroup.visible = true;
   xrUI.hidden = true; $('studio').hidden = false;
 }
 $('xrClose').addEventListener('click', () => xrSession?.end());
@@ -596,9 +892,8 @@ xrUI.addEventListener('pointermove', e => {
 const xend = e => { xpts.delete(e.pointerId); if (xpts.size < 2) x0 = null; };
 xrUI.addEventListener('pointerup', xend); xrUI.addEventListener('pointercancel', xend);
 
-/* ---------- live hand interaction (camera mode) ---------- */
+/* ---------- hand tracking (camera mode) ---------- */
 let handsOn = false, landmarker = null, landmarkerP = null, lastVT = -1, hand = null;
-const phys = { mode: 'floor', vy: 0, spin: 0, palmT: 0, lostT: 0, pokeCD: 0 };
 const MP = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
 function initHands(){
   return landmarkerP ||= (async () => {
@@ -623,29 +918,6 @@ function readHand(lms){
   const pinch = d2(p[4], p[8]) < size * 0.33;
   return { p, size, palm, open: ext >= 3 && !pinch, fist: ext === 0 && !pinch, pinch, pinchPt: { x: (p[4].x + p[8].x) / 2, y: (p[4].y + p[8].y) / 2 }, tip: p[8] };
 }
-const _plane = new THREE.Plane(), _n = new THREE.Vector3(), _v = new THREE.Vector3();
-function worldAt(sx, sy){
-  camera.getWorldDirection(_n); _plane.setFromNormalAndCoplanarPoint(_n.negate(), holder.position);
-  ray.setFromCamera({ x: sx / innerWidth * 2 - 1, y: -(sy / innerHeight) * 2 + 1 }, camera);
-  return ray.ray.intersectPlane(_plane, _v) ? _v.clone() : null;
-}
-const _box = new THREE.Box3();
-function modelRect(){
-  _box.setFromObject(holder); if (_box.isEmpty()) return null;
-  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
-  for (let i = 0; i < 8; i++) {
-    _v.set(i & 1 ? _box.max.x : _box.min.x, i & 2 ? _box.max.y : _box.min.y, i & 4 ? _box.max.z : _box.min.z).project(camera);
-    const x = (_v.x + 1) / 2 * innerWidth, y = (1 - _v.y) / 2 * innerHeight;
-    x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
-  }
-  const px = (x1 - x0) * 0.15, py = (y1 - y0) * 0.15;
-  return { x0: x0 - px, x1: x1 + px, y0: y0 - py, y1: y1 + py };
-}
-function setMoving(on){
-  const t = on && moveA ? moveA : idleA;
-  if (!t || t === curA) return;
-  t.reset().fadeIn(0.25).play(); curA?.fadeOut(0.25); curA = t;
-}
 const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
 function drawHand(){
   hctx.clearRect(0, 0, innerWidth, innerHeight);
@@ -655,48 +927,11 @@ function drawHand(){
   hctx.fillStyle = '#f0b44c';
   for (const i of [4, 8, 12, 16, 20]) { hctx.beginPath(); hctx.arc(hand.p[i].x, hand.p[i].y, 4, 0, 7); hctx.fill(); }
 }
-let tipText = '';
-function tip(t){ if (t !== tipText) { tipText = t; $('handTip').innerHTML = t; } }
-function handStep(dt){
-  if (landmarker && video.readyState >= 2 && video.currentTime !== lastVT) {
-    lastVT = video.currentTime;
-    try { const r = landmarker.detectForVideo(video, performance.now()); hand = r.landmarks?.[0] ? readHand(r.landmarks[0]) : null; } catch { hand = null; }
-    drawHand();
-  }
-  if (!landmarker) return;
-  const r = modelRect(), inR = q => r && q.x > r.x0 && q.x < r.x1 && q.y > r.y0 && q.y < r.y1;
-  phys.pokeCD -= dt;
-  const follow = (q, lift) => {
-    const t = worldAt(q.x, q.y); if (!t) return;
-    const k = Math.min(1, dt * 14);
-    state.x += (t.x - state.x) * k; state.z += (t.z - state.z) * k;
-    state.y += (Math.max(0, t.y - lift) - state.y) * k;
-  };
-  if (phys.mode === 'hand') {
-    if (!hand || hand.fist) { phys.lostT += dt; if (phys.lostT > 0.3) { phys.mode = 'air'; phys.vy = 0; phys.lostT = 0; } }
-    else { phys.lostT = 0; follow(hand.palm, 0); }
-    tip('على كفّك! <b>اقبض يدك</b> ليسقط');
-  } else if (phys.mode === 'grab') {
-    if (!hand || !hand.pinch) { phys.lostT += dt; if (phys.lostT > 0.2) { phys.mode = 'air'; phys.vy = 0; phys.lostT = 0; } }
-    else { phys.lostT = 0; follow(hand.pinchPt, baseH * state.scale * 0.85); }
-    tip('ممسوك! <b>افتح أصابعك</b> لتفلته');
-  } else {
-    if (hand) {
-      if (hand.pinch && inR(hand.pinchPt)) { phys.mode = 'grab'; phys.palmT = 0; }
-      else if (hand.open && inR(hand.palm)) { phys.palmT += dt; if (phys.palmT > 0.5) { phys.mode = 'hand'; phys.palmT = 0; phys.vy = 0; } }
-      else phys.palmT = 0;
-      if (phys.mode !== 'hand' && phys.mode !== 'grab' && !hand.open && inR(hand.tip) && phys.pokeCD <= 0 && state.y < 0.01) {
-        phys.vy = 3.4; phys.mode = 'air'; phys.spin = (Math.random() < 0.5 ? -1 : 1) * 7; phys.pokeCD = 0.9;
-      }
-      tip('<b>المسه</b> بإصبعك ليقفز · <b>افتح كفّك</b> عنده ليصعد عليها · <b>اقرصه</b> لتمسكه');
-    } else tip('أدخل يدك أمام الكاميرا');
-    if (phys.mode === 'air' || state.y > 0) {
-      phys.vy -= 9.8 * dt; state.y += phys.vy * dt;
-      if (state.y <= 0) { state.y = 0; if (phys.vy < -1.6) phys.vy = -phys.vy * 0.32; else { phys.vy = 0; phys.mode = 'floor'; } }
-    }
-  }
-  if (phys.spin) { state.rotY += phys.spin * dt; phys.spin *= Math.pow(0.04, dt); if (Math.abs(phys.spin) < 0.05) phys.spin = 0; }
-  setMoving(phys.mode !== 'floor' || Math.abs(phys.spin) > 0.5);
+function detectHand(){
+  if (!landmarker || video.readyState < 2 || video.currentTime === lastVT) return;
+  lastVT = video.currentTime;
+  try { const r = landmarker.detectForVideo(video, performance.now()); hand = r.landmarks?.[0] ? readHand(r.landmarks[0]) : null; } catch { hand = null; }
+  drawHand();
 }
 
 /* capture: camera frame (cover-cropped) + 3D layer */
@@ -784,7 +1019,7 @@ $('aiGo').addEventListener('click', async () => {
     const recId = 'm' + Date.now(); let url = glbURL;
     try { const blob = await (await fetch(glbURL)).blob(); await idb.put({ id: recId, name, blob }); url = URL.createObjectURL(blob); }
     catch { await idb.put({ id: recId, name, url: glbURL }).catch(() => {}); }
-    const a = { id: recId, name, url, mine: true }; assets.push(a); select(a);
+    const a = { id: recId, name, url, mine: true, size: 1 }; assets.push(a); select(a);
     $('aiBar').style.width = '100%'; aiStatus('جاهز! أُضيف «' + name + '» إلى مجسّماتك.');
   } catch (err) {
     const blocked = err instanceof TypeError;
