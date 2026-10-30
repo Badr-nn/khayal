@@ -96,7 +96,7 @@ model-viewer{width:100%;height:100%;--poster-color:transparent;background:transp
 .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .actions .wide{grid-column:1/-1}
 #hands,#occ,#grain{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-#gl{filter:blur(.35px) saturate(.94) contrast(.97)}
+#gl{background:transparent}
 #grain{opacity:.07;mix-blend-mode:overlay;background-size:160px 160px;animation:grain .5s steps(4) infinite}
 @keyframes grain{0%{background-position:0 0}25%{background-position:-37px 21px}50%{background-position:53px -44px}75%{background-position:-12px 61px}100%{background-position:0 0}}
 @media (prefers-reduced-motion:reduce){#grain{animation:none}}
@@ -1059,6 +1059,9 @@ async function openCam(withHands = false){
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('nomedia');
     stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } });
     video.srcObject = stream; await video.play().catch(() => {});
+    setTimeout(() => {     /* stream granted but no picture: say so instead of a silent black screen */
+      if (camActive && stream && !video.videoWidth) { $('camError').innerHTML = 'الكاميرا لم تبدأ. أغلق التطبيقات الأخرى التي تستخدم الكاميرا، ثم ارجع وافتح الكاميرا من جديد.'; $('camError').hidden = false; }
+    }, 3000);
   } catch (err) {
     $('camError').innerHTML = !isSecureContext
       ? 'الكاميرا تحتاج رابطاً آمناً يبدأ بـ https.'
