@@ -529,10 +529,25 @@ function initThree(){
 function resize(){
   if (!renderer) return;
   const w = innerWidth, h = innerHeight;
-  renderer.setSize(w, h, false); camera.aspect = w / h; placeCamera();
+  renderer.setSize(w, h, false); camera.aspect = w / h; matchCameraFov(); placeCamera();
   const dpr = Math.min(devicePixelRatio, 2);
   for (const [c, x] of [[$('hands'), hctx], [occ, octx]]) { c.width = w * dpr; c.height = h * dpr; x.setTransform(dpr, 0, 0, dpr, 0, 0); }
 }
+/* the 3D lens must see as wide as the phone's lens, or turning the phone slides objects against the room.
+   A typical main camera covers ~68° across the sensor's long side; the video is then cropped to fill the screen. */
+const LONG_FOV = 68;
+function matchCameraFov(){
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) return;
+  const half = THREE.MathUtils.degToRad(LONG_FOV / 2);
+  const tanV = vh >= vw ? Math.tan(half) : Math.tan(half) * vh / vw;          /* lens spread along the video's vertical */
+  const s = Math.max(innerWidth / vw, innerHeight / vh);                    /* cover-crop scale */
+  const vis = innerHeight / (vh * s);                                      /* share of that height still on screen */
+  camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(tanV * vis));
+  camera.updateProjectionMatrix();
+}
+video.addEventListener('loadedmetadata', () => { if (camera) { matchCameraFov(); if (!gyroOn) placeCamera(); } });
+video.addEventListener('resize', () => { if (camera) matchCameraFov(); });
 function placeCamera(){
   const t = THREE.MathUtils.degToRad(state.tilt), D = 3.4;
   camera.position.set(0, D * Math.sin(t), D * Math.cos(t));
