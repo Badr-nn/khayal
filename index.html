@@ -461,7 +461,7 @@ function closeCam(){
   stream?.getTracks().forEach(t => t.stop()); stream = null; video.srcObject = null;
   camEl.hidden = true; $('studio').hidden = false;
 }
-$('goCam').addEventListener('click', openCam);
+$('goCam').addEventListener('click', () => xrSupported ? startXR() : openCam());
 $('camBack').addEventListener('click', closeCam);
 $('camReset').addEventListener('click', () => { Object.assign(state, { scale: 1, rotY: 0, x: 0, z: 0, tilt: 32 }); $('tilt').value = 32; placeCamera(); applyTransform(); });
 $('tilt').addEventListener('input', e => { state.tilt = +e.target.value; placeCamera(); });
