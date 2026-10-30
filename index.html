@@ -443,13 +443,23 @@ function applyTransform(){ holder.scale.setScalar(state.scale); holder.rotation.
 /* model loading shared by both modes */
 const gltfCache = new Map();
 const getGLTF = url => { if (!gltfCache.has(url)) gltfCache.set(url, loader.loadAsync(url).catch(e => { gltfCache.delete(url); throw e; })); return gltfCache.get(url); };
+/* measure from each mesh's own geometry (rest pose); Box3.setFromObject skins fresh clones with stale bones and returns nonsense */
+function measure(m){
+  m.updateMatrixWorld(true);
+  const box = new THREE.Box3(), tmp = new THREE.Box3();
+  m.traverse(o => {
+    if (!o.isMesh || !o.geometry) return;
+    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    box.union(tmp.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld));
+  });
+  return box;
+}
 function prepModel(gltf, a){
   const m = skClone(gltf.scene);
   m.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
-  const s0 = new THREE.Box3().setFromObject(m).getSize(new THREE.Vector3());
+  const s0 = measure(m).getSize(new THREE.Vector3());
   m.scale.multiplyScalar((a.size || 1) / Math.max(s0.x, s0.y, s0.z, 1e-6));
-  m.updateMatrixWorld(true);
-  const b = new THREE.Box3().setFromObject(m), c = b.getCenter(new THREE.Vector3()), s = b.getSize(new THREE.Vector3());
+  const b = measure(m), c = b.getCenter(new THREE.Vector3()), s = b.getSize(new THREE.Vector3());
   m.position.x -= c.x; m.position.z -= c.z; m.position.y -= b.min.y;
   return { m, h: s.y, w: Math.max(s.x, s.z) };
 }
@@ -766,7 +776,7 @@ async function openCam(withHands = false){
   } catch (err) {
     $('camError').innerHTML = !isSecureContext
       ? 'الكاميرا تحتاج رابطاً آمناً يبدأ بـ https.'
-      : 'لم يُسمح بالوصول إلى الكاميرا.<br>فعّل إذن الكاميرا لهذا الموقع من إعدادات المتصفح ثم أعد المحاولة.';
+      : 'لم يُسمح بالوصول إلى الكاميرا.<br>إذا فتحت الرابط من داخل تطبيق آخر، افتحه في Chrome نفسه (⋮ ثم «فتح في Chrome»).<br>وإذا رفضت الإذن سابقاً: اضغط رمز القفل بجانب الرابط ← الأذونات ← الكاميرا ← سماح.';
     $('camError').hidden = false;
   }
 }
