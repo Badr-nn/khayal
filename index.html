@@ -106,6 +106,21 @@ model-viewer{width:100%;height:100%;--poster-color:transparent;background:transp
 .cam-tray::-webkit-scrollbar{display:none}
 .cam-tray .chip{height:34px;font-size:13px;background:rgba(10,12,15,.55);border-color:rgba(255,255,255,.14);color:#f2efe9;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
 .cam-top .hint{max-width:calc(100% - 120px);text-align:center}
+.face-btn{position:absolute;top:10px;left:12px;font-size:12px;padding:6px 12px;border-radius:99px;background:rgba(0,0,0,.4);border:1px solid var(--line);backdrop-filter:blur(6px)}
+.credit{position:absolute;left:12px;right:12px;bottom:10px;font-size:11px;color:var(--muted);direction:ltr;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sheet.sf{max-height:94%}
+.sf-head{display:flex;justify-content:space-between;align-items:center}
+.sf-search{display:flex;gap:8px}
+.sf-search input{flex:1;min-width:0;height:46px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--fg);padding:0 12px;font:inherit}
+.sf-search .btn{height:46px;padding:0 18px}
+.sf-toggle{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.sf-toggle input{accent-color:var(--accent);width:18px;height:18px}
+.status a{color:var(--accent)}
+.sf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.sf-card{display:flex;flex-direction:column;gap:4px;text-align:right;background:var(--bg);border:1px solid var(--line);border-radius:14px;overflow:hidden;padding-bottom:10px;min-width:0}
+.sf-card img{width:100%;aspect-ratio:4/3;object-fit:cover;background:#22262c;display:block}
+.sf-card b{font-size:13px;font-weight:600;padding:4px 10px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sf-card small{font-size:11px;color:var(--muted);padding:0 10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #xrUI{position:fixed;inset:0;z-index:30;touch-action:none;background:transparent}
 #xrUI.clean .xr-ctl{opacity:0;pointer-events:none}
 .xr-bottom{position:absolute;left:0;right:0;bottom:calc(var(--safe-b) + 28px);display:flex;justify-content:center;align-items:center;gap:12px;padding:0 16px}
@@ -134,6 +149,8 @@ model-viewer{width:100%;height:100%;--poster-color:transparent;background:transp
     </model-viewer>
     <div class="stage-label" id="stageLabel">ثعلب</div>
     <div class="loading" id="mvLoading">جارٍ تحميل المجسّم…</div>
+    <div class="credit" id="credit" hidden></div>
+    <button class="face-btn" id="faceBtn" type="button">لفّ حتى يواجهك ↻</button>
   </div>
 
   <div class="tray-head"><span>المجسّمات</span><span id="trayCount"></span></div>
@@ -251,6 +268,26 @@ model-viewer{width:100%;height:100%;--poster-color:transparent;background:transp
   </div>
 </div>
 
+<!-- REALISTIC MODELS (Sketchfab) -->
+<div class="scrim" id="sfSheet" hidden>
+  <div class="sheet sf">
+    <div class="sf-head">
+      <h2>مجسّمات واقعية</h2>
+      <button class="icon-btn" id="sfClose" aria-label="إغلاق"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <form class="sf-search" id="sfForm">
+      <input type="search" id="sfQ" dir="ltr" placeholder="lion, horse, eagle…" aria-label="بحث بالإنجليزية">
+      <button class="btn primary" type="submit">بحث</button>
+    </form>
+    <div class="tray" id="sfCats"></div>
+    <label class="sf-toggle" for="sfAnim"><input type="checkbox" id="sfAnim" checked> متحرّكة فقط</label>
+    <div class="status" id="sfStatus"></div>
+    <div class="bar" id="sfBarWrap" hidden><i id="sfBar"></i></div>
+    <div class="sf-grid" id="sfGrid"></div>
+    <p>المجسّمات من مجتمع Sketchfab، وأغلبها بترخيص يطلب ذكر صاحبها، فاسمه يظهر تحت المجسّم.</p>
+  </div>
+</div>
+
 <!-- SETTINGS SHEET -->
 <div class="scrim" id="setSheet" hidden>
   <div class="sheet">
@@ -259,6 +296,10 @@ model-viewer{width:100%;height:100%;--poster-color:transparent;background:transp
       <input type="password" id="meshyKey" placeholder="msy_…" autocomplete="off">
     </label>
     <p>يُحفظ المفتاح في هذا المتصفح فقط ويُرسل مباشرة إلى Meshy. تحصل عليه من صفحة API في حسابك على meshy.ai.</p>
+    <label class="field" for="sfToken">مفتاح Sketchfab (مجاني، لتنزيل المجسّمات الواقعية)
+      <input type="password" id="sfToken" placeholder="API token" autocomplete="off">
+    </label>
+    <p>سجّل في sketchfab.com، ثم من Settings اختر Password &amp; API وانسخ API Token. يُحفظ في هذا المتصفح فقط.</p>
     <div class="row">
       <button class="btn primary" id="saveKey">حفظ</button>
       <button class="btn ghost" id="closeSet">إغلاق</button>
@@ -266,7 +307,7 @@ model-viewer{width:100%;height:100%;--poster-color:transparent;background:transp
   </div>
 </div>
 
-<input type="file" id="glbFile" accept=".glb,.gltf,model/gltf-binary" hidden>
+<input type="file" id="glbFile" accept=".glb,.zip,model/gltf-binary,application/zip" hidden>
 <div class="toast glass" id="toast" hidden></div>
 
 <script type="module">
@@ -274,6 +315,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { clone as skClone } from 'three/addons/utils/SkeletonUtils.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 
 /* ---------- helpers ---------- */
 const $ = id => document.getElementById(id);
@@ -308,15 +350,13 @@ const LIBRARY = [
   { id: 'soldier', name: 'جندي', url: TJS + 'Soldier.glb', size: 1.1, yaw: Math.PI },
   { id: 'robot', name: 'روبوت', url: TJS + 'RobotExpressive/RobotExpressive.glb', size: 0.95 },
   { id: 'xbot', name: 'إنسان آلي', url: TJS + 'Xbot.glb', size: 1.1 },
-  { id: 'horse', name: 'حصان', url: TJS + 'Horse.glb', size: 1.6, quad: true },
   { id: 'fox', name: 'ثعلب', url: CDN + 'Fox/glTF-Binary/Fox.glb', size: 0.85, quad: true },
-  { id: 'parrot', name: 'ببغاء', url: TJS + 'Parrot.glb', size: 0.4, fly: true },
-  { id: 'flamingo', name: 'فلامنغو', url: TJS + 'Flamingo.glb', size: 0.7, fly: true },
-  { id: 'stork', name: 'لقلق', url: TJS + 'Stork.glb', size: 0.7, fly: true },
   { id: 'chair', name: 'كرسي', url: CDN + 'SheenChair/glTF-Binary/SheenChair.glb', size: 0.9, back: 0.5 },
   { id: 'lantern', name: 'فانوس', url: CDN + 'Lantern/glTF-Binary/Lantern.glb', size: 0.6 }
 ];
 let assets = [...LIBRARY];
+const savedYaw = a => { const v = store.get('yaw:' + a.id, null); if (v !== null) a.yaw = v; return a; };
+assets.forEach(savedYaw);
 let current = assets[0];
 
 async function loadUserModels(){
@@ -324,7 +364,7 @@ async function loadUserModels(){
     const recs = await idb.all();
     for (const r of recs || []) {
       const url = r.blob ? URL.createObjectURL(r.blob) : r.url;
-      assets.push({ id: r.id, name: r.name, url, mine: true, size: 1 });
+      assets.push(savedYaw({ id: r.id, name: r.name, url, mine: true, size: r.size || 1, fly: r.fly, quad: r.quad, credit: r.credit }));
     }
   } catch {}
 }
@@ -345,10 +385,13 @@ function renderTray(){
     tray.append(b);
   }
   const up = document.createElement('button'); up.className = 'chip add'; up.textContent = '+ ارفع مجسّم GLB';
+  up.textContent = '+ ارفع مجسّم';
   up.addEventListener('click', () => $('glbFile').click());
   const ai = document.createElement('button'); ai.className = 'chip add'; ai.textContent = '+ من صورة';
   ai.addEventListener('click', openAI);
-  tray.append(ai, up);
+  const sf = document.createElement('button'); sf.className = 'chip add'; sf.textContent = '+ مجسّمات واقعية';
+  sf.addEventListener('click', openSF);
+  tray.append(sf, ai, up);
   $('trayCount').textContent = assets.length + ' مجسّم';
 }
 
@@ -356,6 +399,8 @@ const mv = $('mv');
 function select(a){
   current = a; renderTray();
   $('stageLabel').textContent = a.name;
+  $('credit').textContent = a.credit || ''; $('credit').hidden = !a.credit;
+  mv.setAttribute('orientation', `0deg 0deg ${-(a.yaw || 0) * 180 / Math.PI}deg`);
   $('mvLoading').hidden = false; $('mvLoading').textContent = 'جارٍ تحميل المجسّم…';
   mv.src = a.url;
   store.set('last', a.id);
@@ -379,6 +424,15 @@ function updateARNote(){
   if (can && current.url.startsWith('blob:') && /Android/i.test(navigator.userAgent) && !('xr' in navigator))
     $('arNote').textContent = 'المجسّمات المرفوعة تعمل في الغرفة عبر Chrome على أندرويد.';
 }
+/* which way does this model face? the person turns it until it looks at them; the look-at logic relies on it */
+$('faceBtn').addEventListener('click', () => {
+  current.yaw = ((current.yaw || 0) + Math.PI / 2) % (Math.PI * 2);
+  store.set('yaw:' + current.id, current.yaw);
+  mv.removeAttribute('auto-rotate'); mv.cameraOrbit = '0deg 75deg auto'; mv.jumpCameraToGoal?.();
+  mv.setAttribute('orientation', `0deg 0deg ${-current.yaw * 180 / Math.PI}deg`);
+  toast('اضغط مجدداً حتى يصبح وجهه نحوك', 1800);
+  clearTimeout(window.__rot); window.__rot = setTimeout(() => mv.setAttribute('auto-rotate', ''), 6000);
+});
 $('goAR').addEventListener('click', () => {
   if (xrSupported) { startXR(); return; }
   try { mv.activateAR(); } catch { toast('تعذّر فتح وضع الغرفة'); }
@@ -388,11 +442,13 @@ $('goAR').addEventListener('click', () => {
 $('glbFile').addEventListener('change', async e => {
   const f = e.target.files[0]; e.target.value = '';
   if (!f) return;
-  if (!/\.(glb|gltf)$/i.test(f.name)) { toast('اختر ملفاً بصيغة GLB'); return; }
+  if (!/\.(glb|zip)$/i.test(f.name)) { toast('اختر ملف GLB، أو ملف ZIP بصيغة glTF'); return; }
+  let blob = f;
+  if (/\.zip$/i.test(f.name)) { toast('جارٍ تحويل الملف…', 6000); try { blob = await zipToGlb(await f.arrayBuffer()); } catch { toast('تعذّر قراءة الملف. نزّله بصيغة GLB أو glTF.'); return; } }
   const id = 'u' + Date.now();
-  const name = f.name.replace(/\.(glb|gltf)$/i, '').slice(0, 24);
-  await idb.put({ id, name, blob: f }).catch(() => {});
-  const a = { id, name, url: URL.createObjectURL(f), mine: true, size: 1 };
+  const name = f.name.replace(/\.(glb|zip)$/i, '').slice(0, 24);
+  await idb.put({ id, name, blob, size: 1 }).catch(() => {});
+  const a = { id, name, url: URL.createObjectURL(blob), mine: true, size: 1 };
   assets.push(a); select(a); toast('أُضيف ' + name);
 });
 
@@ -1154,10 +1210,132 @@ $('saveShot').addEventListener('click', async () => {
   toast('حُفظت الصورة');
 });
 
+/* ---------- realistic models from Sketchfab ---------- */
+/* label, search words, size in this scene's metres (≈0.63 of real life, matching the people), flags */
+const CATS = [
+  ['حصان', 'horse', 1.5, { quad: true }], ['أسد', 'lion', 1.35, { quad: true }], ['نمر', 'tiger', 1.45, { quad: true }],
+  ['فيل', 'elephant', 3.0, { quad: true }], ['ذئب', 'wolf', 0.95, { quad: true }], ['غزال', 'deer', 1.1, { quad: true }],
+  ['دب', 'bear', 1.4, { quad: true }], ['ماموث', 'mammoth', 3.4, { quad: true }], ['ديناصور', 'dinosaur', 3.0, { quad: true }],
+  ['كلب', 'dog', 0.6, { quad: true }], ['قطة', 'cat', 0.35, { quad: true }], ['جمل', 'camel', 1.9, { quad: true }],
+  ['نسر', 'eagle', 0.6, { fly: true }], ['بومة', 'owl', 0.3, { fly: true }], ['طائر', 'bird', 0.25, { fly: true }],
+  ['إنسان', 'realistic human', 1.1, {}], ['روبوت', 'robot', 1.1, {}]
+];
+let sfMeta = { label: '', size: 1 }, sfBusy = false;
+const sfStatus = (html, err) => { const s = $('sfStatus'); s.innerHTML = html; s.classList.toggle('err', !!err); };
+function openSF(){
+  $('sfSheet').hidden = false;
+  if (!$('sfGrid').children.length) runCat(CATS[0]);
+}
+function renderCats(){
+  const t = $('sfCats'); t.innerHTML = '';
+  for (const c of CATS) {
+    const b = document.createElement('button'); b.className = 'chip'; b.textContent = c[0];
+    b.addEventListener('click', () => runCat(c)); t.append(b);
+  }
+}
+function runCat(c){
+  [...$('sfCats').children].forEach(b => b.setAttribute('aria-pressed', b.textContent === c[0]));
+  $('sfQ').value = c[1]; sfMeta = { label: c[0], size: c[2], ...c[3] }; sfSearch(c[1]);
+}
+async function sfSearch(q){
+  if (!q.trim()) return;
+  sfStatus('جارٍ البحث…'); $('sfGrid').innerHTML = '';
+  const u = new URL('https://api.sketchfab.com/v3/search');
+  u.search = new URLSearchParams({ type: 'models', q, downloadable: 'true', sort_by: '-likeCount', count: '24', ...($('sfAnim').checked ? { animated: 'true' } : {}) });
+  try {
+    const r = await fetch(u); if (!r.ok) throw new Error(r.status);
+    const res = ((await r.json()).results || []).filter(m => !m.faceCount || m.faceCount < 400000);
+    if (!res.length) { sfStatus('لا نتائج. جرّب كلمة إنجليزية أخرى، أو ألغِ «متحرّكة فقط».'); return; }
+    sfStatus('اختر مجسّماً ليُضاف إلى مجسّماتك. الأعلى إعجاباً أولاً.');
+    for (const m of res) $('sfGrid').append(sfCard(m));
+  } catch { sfStatus('تعذّر البحث في Sketchfab. تحقق من الإنترنت.', true); }
+}
+function sfCard(m){
+  const imgs = (m.thumbnails?.images || []).slice().sort((a, b) => Math.abs(a.width - 360) - Math.abs(b.width - 360));
+  const size = m.archives?.glb?.size || m.archives?.gltf?.size;
+  const b = document.createElement('button'); b.className = 'sf-card';
+  const img = document.createElement('img'); img.alt = ''; img.loading = 'lazy'; if (imgs[0]) img.src = imgs[0].url;
+  const t = document.createElement('b'); t.textContent = m.name;
+  const s = document.createElement('small');
+  s.textContent = (m.user?.displayName || '') + (m.animationCount ? ' · متحرّك' : '') + (size ? ' · ' + Math.round(size / 1048576) + ' MB' : '');
+  b.append(img, t, s);
+  b.addEventListener('click', () => sfDownload(m));
+  return b;
+}
+async function fetchWithProgress(url, onP){
+  const r = await fetch(url); if (!r.ok) throw new Error('download ' + r.status);
+  const total = +r.headers.get('content-length') || 0;
+  if (!r.body || !total) return r.arrayBuffer();
+  const rd = r.body.getReader(), parts = []; let got = 0;
+  for (;;) { const { done, value } = await rd.read(); if (done) break; parts.push(value); got += value.length; onP(got / total); }
+  const out = new Uint8Array(got); let o = 0; for (const p of parts) { out.set(p, o); o += p.length; }
+  return out.buffer;
+}
+const mimeOf = n => /\.png$/i.test(n) ? 'image/png' : /\.jpe?g$/i.test(n) ? 'image/jpeg' : /\.webp$/i.test(n) ? 'image/webp' : 'application/octet-stream';
+/* a glTF zip (scene.gltf + scene.bin + textures) becomes one .glb the whole app can use */
+async function zipToGlb(buf){
+  const { unzipSync } = await import('https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js');
+  const files = unzipSync(new Uint8Array(buf)), names = Object.keys(files);
+  const glb = names.find(n => /\.glb$/i.test(n));
+  if (glb) return new Blob([files[glb]], { type: 'model/gltf-binary' });
+  const main = names.find(n => /\.gltf$/i.test(n));
+  if (!main) throw new Error('nogltf');
+  const base = main.includes('/') ? main.slice(0, main.lastIndexOf('/') + 1) : '';
+  const urls = {};
+  for (const n of names) if (!n.endsWith('/')) urls[n] = URL.createObjectURL(new Blob([files[n]], { type: mimeOf(n) }));
+  const manager = new THREE.LoadingManager();
+  manager.setURLModifier(u => {
+    if (/^(blob:|data:|https?:)/.test(u)) return u;
+    const k = decodeURIComponent(u.replace(/^\.\//, ''));
+    return urls[base + k] || urls[k] || u;
+  });
+  const gltf = await new GLTFLoader(manager).parseAsync(new TextDecoder().decode(files[main]), '');
+  const out = await new GLTFExporter().parseAsync(gltf.scene, { binary: true, animations: gltf.animations, maxTextureSize: 2048 });
+  Object.values(urls).forEach(u => URL.revokeObjectURL(u));
+  return new Blob([out], { type: 'model/gltf-binary' });
+}
+async function sfDownload(m){
+  if (sfBusy) return;
+  const page = `https://sketchfab.com/3d-models/${m.uid}`;
+  const manual = `<br><a href="${page}" target="_blank" rel="noopener">افتحه في Sketchfab</a>، نزّله بصيغة GLB أو glTF، ثم ارفعه من «+ ارفع مجسّم».`;
+  const token = store.get('sfToken', '');
+  if (!token) { sfStatus('للتنزيل المباشر أضف مفتاح Sketchfab المجاني من الإعدادات.' + manual); return; }
+  sfBusy = true; $('sfBarWrap').hidden = false; $('sfBar').style.width = '2%';
+  sfStatus('جارٍ تجهيز «' + m.name + '»…');
+  try {
+    const api = `https://api.sketchfab.com/v3/models/${m.uid}/download`;
+    let r = await fetch(api, { headers: { Authorization: 'Token ' + token } });
+    if (r.status === 401 || r.status === 403) r = await fetch(api, { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) throw new Error(r.status === 401 ? 'المفتاح غير صحيح. راجعه في الإعدادات.' : r.status === 429 ? 'وصلت حد التنزيل اليومي في Sketchfab. جرّب لاحقاً.' : r.status === 403 ? 'صاحب هذا المجسّم لا يسمح بتنزيله عبر التطبيقات.' : 'رفض Sketchfab الطلب (' + r.status + ').');
+    const j = await r.json(), arc = j.glb || j.gltf;
+    if (!arc?.url) throw new Error('لا يوجد ملف قابل للتنزيل لهذا المجسّم.');
+    sfStatus('جارٍ التنزيل…');
+    const buf = await fetchWithProgress(arc.url, p => { $('sfBar').style.width = Math.max(3, p * 90) + '%'; });
+    sfStatus('جارٍ التحويل…');
+    const blob = j.glb ? new Blob([buf], { type: 'model/gltf-binary' }) : await zipToGlb(buf);
+    $('sfBar').style.width = '100%';
+    const name = (sfMeta.label && $('sfQ').value === CATS.find(c => c[0] === sfMeta.label)?.[1] ? sfMeta.label + ' ' : '') + '';
+    const rec = { id: 's' + m.uid, name: (name || m.name).trim().slice(0, 24), blob, size: sfMeta.size || 1, fly: !!sfMeta.fly, quad: !!sfMeta.quad,
+      credit: `"${m.name}" — ${m.user?.displayName || ''} · ${m.license?.label || 'Sketchfab'}` };
+    if (assets.some(a => a.id === rec.id)) { sfStatus('هذا المجسّم موجود في مجسّماتك.'); return; }
+    await idb.put(rec).catch(() => {});
+    const a = { ...rec, url: URL.createObjectURL(blob), mine: true }; delete a.blob;
+    assets.push(a); select(a); if (camActive) renderCamTray();
+    sfStatus('أُضيف «' + a.name + '» إلى مجسّماتك.');
+    toast('أُضيف ' + a.name);
+  } catch (err) {
+    sfStatus((err instanceof TypeError ? 'تعذّر التنزيل المباشر من المتصفح.' : err.message === 'nogltf' ? 'الملف لا يحتوي على مجسّم يمكن قراءته.' : err.message) + manual, true);
+  } finally { sfBusy = false; setTimeout(() => { $('sfBarWrap').hidden = true; $('sfBar').style.width = '0'; }, 800); }
+}
+renderCats();
+$('sfClose').addEventListener('click', () => { $('sfSheet').hidden = true; });
+$('sfForm').addEventListener('submit', e => { e.preventDefault(); sfMeta = { label: '', size: 1 }; [...$('sfCats').children].forEach(b => b.setAttribute('aria-pressed', 'false')); sfSearch($('sfQ').value); });
+$('sfAnim').addEventListener('change', () => sfSearch($('sfQ').value));
+
 /* ---------- settings ---------- */
-$('openSettings').addEventListener('click', () => { $('meshyKey').value = store.get('meshyKey', ''); $('setSheet').hidden = false; });
+$('openSettings').addEventListener('click', () => { $('meshyKey').value = store.get('meshyKey', ''); $('sfToken').value = store.get('sfToken', ''); $('setSheet').hidden = false; });
 $('closeSet').addEventListener('click', () => $('setSheet').hidden = true);
-$('saveKey').addEventListener('click', () => { store.set('meshyKey', $('meshyKey').value.trim()); $('setSheet').hidden = true; toast('حُفظ المفتاح'); });
+$('saveKey').addEventListener('click', () => { store.set('meshyKey', $('meshyKey').value.trim()); store.set('sfToken', $('sfToken').value.trim()); $('setSheet').hidden = true; toast('حُفظ المفتاح'); });
 
 /* ---------- image → 3D via Meshy ---------- */
 let aiImage = null, aiBusy = false;
