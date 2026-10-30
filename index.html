@@ -108,6 +108,15 @@ model-viewer{width:100%;height:100%;--poster-color:transparent;background:transp
 .cam-top .hint{max-width:calc(100% - 120px);text-align:center}
 .face-btn{position:absolute;top:10px;left:12px;font-size:12px;padding:6px 12px;border-radius:99px;background:rgba(0,0,0,.4);border:1px solid var(--line);backdrop-filter:blur(6px)}
 .ent-del{position:absolute;left:0;top:0;transform:translate(-50%,-130%);font-size:13px;font-weight:600;padding:7px 14px;border-radius:99px;background:rgba(255,107,94,.92);color:#fff;z-index:5}
+.top-btns{display:flex;gap:8px}
+@media (orientation:landscape) and (max-height:560px){
+  #studio{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);grid-template-rows:auto auto auto auto 1fr;column-gap:16px;row-gap:12px;align-content:stretch}
+  #studio .top{grid-column:1/-1}
+  #studio .stage{grid-column:1;grid-row:2/-1;min-height:0}
+  #studio .tray-head,#studio .tray,#studio .actions,#studio .note{grid-column:2}
+  .tilt input{height:110px}
+  .hand-tip{bottom:calc(var(--safe-b) + 168px)}
+}
 .chip.edit{color:var(--muted)}
 .chip.edit.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .chip.del{border-color:rgba(255,107,94,.55);color:#ffb3ab}
@@ -132,6 +141,10 @@ model-viewer{width:100%;height:100%;--poster-color:transparent;background:transp
 .sf-card img{width:100%;aspect-ratio:4/3;object-fit:cover;background:#22262c;display:block}
 .sf-card b{font-size:13px;font-weight:600;padding:4px 10px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sf-card small{font-size:11px;color:var(--muted);padding:0 10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#cam.xr{background:transparent}
+#cam.xr #video,#cam.xr .tilt,#cam.xr #camAnchor,#cam.xr #grain{display:none}
+#cam.xr #gl{opacity:0}
+#cam.clean .cam-top,#cam.clean .cam-bottom,#cam.clean .cam-tray,#cam.clean .hand-tip,#cam.clean .ent-del,#cam.clean #hands{visibility:hidden}
 #xrUI{position:fixed;inset:0;z-index:30;touch-action:none;background:transparent}
 #xrUI.clean .xr-ctl{opacity:0;pointer-events:none}
 .xr-bottom{position:absolute;left:0;right:0;bottom:calc(var(--safe-b) + 28px);display:flex;justify-content:center;align-items:center;gap:12px;padding:0 16px}
@@ -146,9 +159,12 @@ model-viewer{width:100%;height:100%;--poster-color:transparent;background:transp
 <section id="studio" class="screen">
   <div class="top">
     <div class="brand">خيال<small>ضع أي مجسّم في عالمك والتقطه</small></div>
+    <div class="top-btns">
+    <button class="icon-btn rotate-btn" type="button" aria-label="تدوير الشاشة"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M3 14a9 9 0 0 0 6 6M21 10a9 9 0 0 0-6-6"/></svg></button>
     <button class="icon-btn" id="openSettings" aria-label="الإعدادات">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
     </button>
+    </div>
   </div>
 
   <div class="stage">
@@ -214,6 +230,7 @@ model-viewer{width:100%;height:100%;--poster-color:transparent;background:transp
   <div class="cam-tray" id="camTray" aria-label="أضف إلى المشهد"></div>
   <div class="cam-bottom">
     <div class="side start">
+      <button class="round glass rotate-btn" type="button" aria-label="تدوير الشاشة"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M3 14a9 9 0 0 0 6 6M21 10a9 9 0 0 0-6-6"/></svg></button>
       <button class="round glass" id="camDelete" aria-label="احذف المجسّم المختار">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg>
       </button>
@@ -510,7 +527,7 @@ function initThree(){
   scene = new THREE.Scene();
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-  camera = new THREE.PerspectiveCamera(50, 1, 0.01, 100);
+  camera = new THREE.PerspectiveCamera(50, 1, 0.01, 100); viewCam = camera;
   hemi = new THREE.HemisphereLight(0xfff6ea, 0x4a4036, 0.6); scene.add(hemi);
   sun = new THREE.DirectionalLight(0xffffff, 2.2); scene.add(sun.target);
   sun.position.set(1.5, 4, 2); sun.castShadow = true;
@@ -596,6 +613,9 @@ function loadIntoScene(a){
 }
 
 /* ---------- keep the scene fixed in the room while the phone turns (gyroscope, 3 degrees of freedom) ---------- */
+let FLOOR = 0, viewCam = null;
+const _cp = new THREE.Vector3(); const camPos = () => _cp.setFromMatrixPosition(viewCam.matrixWorld);
+function setFloor(y){ FLOOR = y; floor.constant = -y; entGroup.position.y = y; }
 let gyroOn = false, gyroAvail = false, gyroAsked = false, devOk = false, yaw0 = null;
 const devQ = new THREE.Quaternion(), _eul = new THREE.Euler(), _qa = new THREE.Quaternion(), _qg = new THREE.Quaternion();
 const _q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)), _zee = new THREE.Vector3(0, 0, 1);
@@ -633,9 +653,9 @@ function gyroCamera(){
 }
 /* new characters appear where the phone is pointing */
 function spawnSpot(){
-  if (gyroOn) {
+  if (gyroOn || xrH) {
     const f = floorPoint(innerWidth / 2, innerHeight * 0.62);
-    if (f && f.distanceTo(camera.position) < 7) return { x: f.x + (Math.random() - 0.5) * 0.4, z: f.z + (Math.random() - 0.5) * 0.3 };
+    if (f && f.distanceTo(camPos()) < 7) return { x: f.x + (Math.random() - 0.5) * 0.4, z: f.z + (Math.random() - 0.5) * 0.3 };
   }
   return freeSpot();
 }
@@ -755,18 +775,19 @@ function mount(e, o){
 }
 
 const ray = new THREE.Raycaster(), floor = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit = new THREE.Vector3();
-const _plane = new THREE.Plane(), _n = new THREE.Vector3(), _v = new THREE.Vector3();
-function setRay(sx, sy){ ray.setFromCamera({ x: sx / innerWidth * 2 - 1, y: -(sy / innerHeight) * 2 + 1 }, camera); }
+const _plane = new THREE.Plane(), _n = new THREE.Vector3(), _v = new THREE.Vector3(), _o2 = new THREE.Vector3();
+function setRay(sx, sy){ ray.setFromCamera({ x: sx / innerWidth * 2 - 1, y: -(sy / innerHeight) * 2 + 1 }, viewCam); }
 function worldAt(sx, sy, depthPt){
-  camera.getWorldDirection(_n); _plane.setFromNormalAndCoplanarPoint(_n.negate(), depthPt);
+  viewCam.getWorldDirection(_n); _plane.setFromNormalAndCoplanarPoint(_n.negate(), _o2.copy(depthPt).setY(depthPt.y + FLOOR));
   setRay(sx, sy); return ray.ray.intersectPlane(_plane, new THREE.Vector3());
 }
+function worldAtLocal(sx, sy, depthPt){ const w = worldAt(sx, sy, depthPt); if (w) w.y -= FLOOR; return w; }
 function worldAtDist(sx, sy, dist){ setRay(sx, sy); return ray.ray.origin.clone().addScaledVector(ray.ray.direction, dist); }
 function floorPoint(x, y){ setRay(x, y); return ray.ray.intersectPlane(floor, hit) ? hit.clone() : null; }
 
 function grabStart(e, mode){
   const anchorY = mode === 'grab' ? e.y + e.h * e.scale * 0.85 : e.y;
-  e.holdDist = camera.position.distanceTo(_v.set(e.x, anchorY, e.z));
+  e.holdDist = camPos().distanceTo(_v.set(e.x, anchorY + FLOOR, e.z));
   e.holdSize = hand ? hand.size : 100;
   e.ride = null; e.goal = null; e.palmT = 0; e.lostT = 0; e.vx = e.vy = e.vz = 0; e.tgt = null; selected = e;
   if (mode === 'hand' && !e.fly) { e.mode = 'hop'; e.hopT = 0; e.hopFrom = { x: e.x, y: e.y, z: e.z }; playOnce(e, e.acts.jump); }
@@ -793,7 +814,7 @@ function rectOf(e){
   const R = e.w * e.scale * 0.5, H = e.h * e.scale;
   let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
   for (let i = 0; i < 8; i++) {
-    _v.set(e.x + (i & 1 ? R : -R), e.y + (i & 2 ? H : 0), e.z + (i & 4 ? R : -R)).project(camera);
+    _v.set(e.x + (i & 1 ? R : -R), FLOOR + e.y + (i & 2 ? H : 0), e.z + (i & 4 ? R : -R)).project(viewCam);
     const x = (_v.x + 1) / 2 * innerWidth, y = (1 - _v.y) / 2 * innerHeight;
     x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
   }
@@ -845,7 +866,7 @@ function updateEntities(dt, time){
           const q = held.mode === 'grab' ? hand.pinchPt : hand.palm;
           const dist = clamp(held.holdDist * (held.holdSize / Math.max(hand.size, 1)), 0.7, 9);   /* hand nearer the lens -> object nearer */
           const t = worldAtDist(q.x, q.y, dist);
-          t.y -= held.mode === 'grab' ? held.h * held.scale * 0.85 : (held.fly ? -0.02 : 0);
+          t.y -= FLOOR + (held.mode === 'grab' ? held.h * held.scale * 0.85 : (held.fly ? -0.02 : 0));
           t.y = Math.max(0, t.y); held.tgt = t;
         }
         const px = held.x, py = held.y, pz = held.z;
@@ -943,9 +964,9 @@ function rotateBoneWorld(bone, R, w){
 function lookStep(e, dt){
   let T = null;
   const H = e.h * e.scale;
-  if (e.mode === 'hand' || e.mode === 'grab' || e.mode === 'hop') T = camera.position;
+  if (e.mode === 'hand' || e.mode === 'grab' || e.mode === 'hop') T = _o.copy(camPos()).setY(camPos().y - FLOOR);
   else if (e.mode === 'walk' && e.goal) T = _o.set(e.goal.x, H * 0.9, e.goal.z);
-  else if (handsOn && hand) T = worldAt(hand.open ? hand.palm.x : hand.tip.x, hand.open ? hand.palm.y : hand.tip.y, _c.set(e.x, e.y + H * 0.9, e.z));
+  else if (handsOn && hand) T = worldAtLocal(hand.open ? hand.palm.x : hand.tip.x, hand.open ? hand.palm.y : hand.tip.y, _c.set(e.x, e.y + H * 0.9, e.z));
   else {
     let bd = 2.2;
     for (const o of entities) {
@@ -988,9 +1009,10 @@ let lightT = 0, hemi = null;
 const L = { r: 1, g: 0.97, b: 0.93, lum: 0.5, cx: 0.6, cy: 0.25, con: 0.35 }, Lt = { ...L };
 function estimateLight(dt){
   lightT -= dt;
-  if (lightT <= 0 && video.readyState >= 2) {
+  const src = xrH ? (cp ? xrCam.canvas : null) : (video.readyState >= 2 ? video : null);
+  if (lightT <= 0 && src) {
     lightT = 0.3;
-    lctx.drawImage(video, 0, 0, 32, 24);
+    lctx.drawImage(src, 0, 0, 32, 24);
     const d = lctx.getImageData(0, 0, 32, 24).data;
     let r = 0, g = 0, b = 0, sw = 0, sx = 0, sy = 0, mx = 0, sum = 0;
     for (let i = 0, p = 0; i < d.length; i += 4, p++) {
@@ -1005,7 +1027,7 @@ function estimateLight(dt){
   const tint = c => 0.55 + 0.45 * c;
   hemi.color.setRGB(tint(L.r), tint(L.g), tint(L.b)); hemi.intensity = 0.35 + L.lum * 0.9;
   sun.color.setRGB(tint(L.r), tint(L.g), tint(L.b)); sun.intensity = 0.7 + L.con * 3;
-  sun.position.set((L.cx - 0.5) * 8, 2.5 + (0.6 - L.cy) * 3, 2.2);
+  sun.position.set(sun.target.position.x + (L.cx - 0.5) * 8, sun.target.position.y + 2.5 + (0.6 - L.cy) * 3, sun.target.position.z + 2.2);
   renderer.toneMappingExposure = clamp(0.5 + L.lum * 1.2, 0.5, 1.5);
   ground.material.opacity = clamp(0.14 + L.con * 0.5, 0.14, 0.5);
 }
@@ -1013,9 +1035,14 @@ function estimateLight(dt){
 function loop(){
   raf = requestAnimationFrame(loop);
   const dt = Math.min(clock.getDelta(), 0.05), time = clock.elapsedTime;
+  viewCam = camera;
   if (handsOn) detectHand();
   gyroCamera();
   estimateLight(dt);
+  frameStep(dt, time);
+  renderer.render(scene, camera);
+}
+function frameStep(dt, time){
   updateEntities(dt, time);
   drawOcclusion();
   for (const e of entities) {
@@ -1042,14 +1069,13 @@ function loop(){
   const del = $('entDel');
   if (entDelT > 0 && selected && entities.includes(selected) && !isHeld(selected)) {
     entDelT -= dt;
-    _v.set(selected.x, selected.y + selected.h * selected.scale, selected.z).project(camera);
+    _v.set(selected.x, FLOOR + selected.y + selected.h * selected.scale, selected.z).project(viewCam);
     del.style.left = ((_v.x + 1) / 2 * innerWidth) + 'px'; del.style.top = ((1 - _v.y) / 2 * innerHeight) + 'px'; del.hidden = false;
   } else del.hidden = true;
   if (selected && !isHeld(selected) && (entDelT > 0 || (entities.length > 1 && !handsOn))) {
-    selRing.visible = true; selRing.position.set(selected.x, (selected.mode === 'ride' ? selected.y : 0) + 0.004, selected.z);
+    selRing.visible = true; selRing.position.set(selected.x, FLOOR + (selected.mode === 'ride' ? selected.y : 0) + 0.004, selected.z);
     selRing.scale.setScalar(Math.max(0.3, selected.w * selected.scale * 0.6 / 0.47));
   } else selRing.visible = false;
-  renderer.render(scene, camera);
 }
 
 function renderCamTray(){
@@ -1092,8 +1118,8 @@ function closeCam(){
   camEl.hidden = true; $('studio').hidden = false;
 }
 $('goCam').addEventListener('click', () => xrSupported ? startXR() : openCam());
-$('goHands').addEventListener('click', () => openCam(true));
-$('camBack').addEventListener('click', closeCam);
+$('goHands').addEventListener('click', () => xrSupported ? startHandsXR() : openCam(true));
+$('camBack').addEventListener('click', () => xrH ? xrH.session.end() : closeCam());
 $('camReset').addEventListener('click', () => {
   while (entities.length) removeEntity(entities[0]);
   state.tilt = 32; $('tilt').value = 32; yaw0 = null; if (!gyroOn) placeCamera(); addEntity(current);
@@ -1122,7 +1148,7 @@ function gestureStart(){
     const [a, b] = p; g0 = { mode: 2, e: selected, d: Math.hypot(b.x - a.x, b.y - a.y), ang: Math.atan2(b.y - a.y, b.x - a.x), s: selected.scale, r: selected.rotY };
   }
 }
-gl.addEventListener('pointerdown', e => { gl.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); gestureStart(); });
+gl.addEventListener('pointerdown', e => { if (xrH && !xrH.placed) { placeScene(); return; } gl.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); gestureStart(); });
 gl.addEventListener('pointermove', e => {
   if (!pts.has(e.pointerId)) return;
   pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -1208,6 +1234,120 @@ xrUI.addEventListener('pointermove', e => {
 const xend = e => { xpts.delete(e.pointerId); if (xpts.size < 2) x0 = null; };
 xrUI.addEventListener('pointerup', xend); xrUI.addEventListener('pointercancel', xend);
 
+/* ---------- full room tracking + live hands (Chrome on Android) ----------
+   WebXR keeps the scene locked to the real floor while you move; its camera-access feature hands us each
+   camera frame, which we shrink and pass to the hand tracker. */
+let xrH = null;
+const xrCam = { canvas: document.createElement('canvas'), ctx: null, fresh: false };
+xrCam.ctx = xrCam.canvas.getContext('2d', { willReadFrequently: true });
+let cp = null;
+function makeCopier(glc, W, H){
+  const sh = (type, src) => { const s = glc.createShader(type); glc.shaderSource(s, src); glc.compileShader(s); return s; };
+  const prog = glc.createProgram();
+  glc.attachShader(prog, sh(glc.VERTEX_SHADER, '#version 300 es\nin vec2 p; out vec2 uv; void main(){ uv = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }'));
+  glc.attachShader(prog, sh(glc.FRAGMENT_SHADER, '#version 300 es\nprecision mediump float; in vec2 uv; uniform sampler2D t; out vec4 o; void main(){ o = texture(t, uv); }'));
+  glc.bindAttribLocation(prog, 0, 'p'); glc.linkProgram(prog);
+  const vao = glc.createVertexArray(); glc.bindVertexArray(vao);
+  const buf = glc.createBuffer(); glc.bindBuffer(glc.ARRAY_BUFFER, buf);
+  glc.bufferData(glc.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), glc.STATIC_DRAW);
+  glc.enableVertexAttribArray(0); glc.vertexAttribPointer(0, 2, glc.FLOAT, false, 0, 0); glc.bindVertexArray(null);
+  const tex = glc.createTexture(); glc.bindTexture(glc.TEXTURE_2D, tex);
+  glc.texImage2D(glc.TEXTURE_2D, 0, glc.RGBA, W, H, 0, glc.RGBA, glc.UNSIGNED_BYTE, null);
+  glc.texParameteri(glc.TEXTURE_2D, glc.TEXTURE_MIN_FILTER, glc.LINEAR);
+  const fb = glc.createFramebuffer(); glc.bindFramebuffer(glc.FRAMEBUFFER, fb);
+  glc.framebufferTexture2D(glc.FRAMEBUFFER, glc.COLOR_ATTACHMENT0, glc.TEXTURE_2D, tex, 0);
+  glc.bindFramebuffer(glc.FRAMEBUFFER, null);
+  xrCam.canvas.width = W; xrCam.canvas.height = H;
+  return { W, H, prog, vao, fb, loc: glc.getUniformLocation(prog, 't'), px: new Uint8Array(W * H * 4), img: new ImageData(W, H) };
+}
+function grabCamFrame(frame){
+  const view = frame.getViewerPose(renderer.xr.getReferenceSpace())?.views?.[0];
+  if (!view?.camera) { xrH.noCam++; return; }
+  const glc = renderer.getContext();
+  const W = 256, H = Math.round(256 * view.camera.height / view.camera.width);
+  if (!cp || cp.W !== W || cp.H !== H) cp = makeCopier(glc, W, H);
+  const tex = xrH.binding.getCameraImage(view.camera);
+  glc.bindFramebuffer(glc.FRAMEBUFFER, cp.fb); glc.viewport(0, 0, W, H);
+  glc.disable(glc.DEPTH_TEST); glc.disable(glc.BLEND); glc.disable(glc.SCISSOR_TEST); glc.disable(glc.CULL_FACE);
+  glc.useProgram(cp.prog); glc.activeTexture(glc.TEXTURE0); glc.bindTexture(glc.TEXTURE_2D, tex); glc.uniform1i(cp.loc, 0);
+  glc.bindVertexArray(cp.vao); glc.drawArrays(glc.TRIANGLE_STRIP, 0, 4); glc.bindVertexArray(null);
+  glc.readPixels(0, 0, W, H, glc.RGBA, glc.UNSIGNED_BYTE, cp.px);
+  glc.bindFramebuffer(glc.FRAMEBUFFER, null);
+  renderer.state.reset();
+  const row = W * 4;
+  for (let y = 0; y < H; y++) cp.img.data.set(cp.px.subarray((H - 1 - y) * row, (H - y) * row), y * row);   /* GL rows run bottom-up */
+  xrCam.ctx.putImageData(cp.img, 0, 0); xrCam.fresh = true;
+}
+const noSelect = e => e.preventDefault();
+async function startHandsXR(){
+  initThree(); resize();
+  let session;
+  try {
+    session = await navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['hit-test'], optionalFeatures: ['dom-overlay', 'camera-access'], domOverlay: { root: camEl } });
+  } catch { openCam(true); return; }
+  if (session.enabledFeatures && !session.enabledFeatures.includes('camera-access')) {
+    await session.end().catch(() => {});
+    toast('جوالك لا يسمح بقراءة الكاميرا داخل الواقع المعزز، فاستخدمنا التثبيت بالدوران', 3800);
+    openCam(true); return;
+  }
+  renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType('local');
+  await renderer.xr.setSession(session);
+  const hitSource = await session.requestHitTestSource({ space: await session.requestReferenceSpace('viewer') });
+  xrH = { session, hitSource, binding: new XRWebGLBinding(session, renderer.getContext()), placed: false, n: 0, noCam: 0, warned: false };
+  if (!reticle) {
+    reticle = new THREE.Mesh(new THREE.RingGeometry(0.07, 0.095, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xf0b44c }));
+    reticle.matrixAutoUpdate = false; scene.add(reticle);
+  }
+  reticle.visible = false; reticle.material.visible = true;
+  camActive = true; handsOn = true;
+  $('studio').hidden = true; camEl.hidden = false; camEl.classList.add('xr'); $('camError').hidden = true;
+  $('handTip').hidden = false; tip('أدخل يدك أمام الكاميرا');
+  holder.visible = false; entGroup.visible = false; ground.visible = false; selRing.visible = false;
+  cancelAnimationFrame(raf); renderCamTray();
+  hint('وجّه الجوال نحو الأرض وحرّكه ببطء حتى تظهر الدائرة، ثم اضغط على الشاشة');
+  initHands().catch(() => tip('تعذّر تحميل تتبّع اليد. تحقق من الإنترنت.'));
+  camEl.addEventListener('beforexrselect', noSelect);
+  session.addEventListener('end', endHandsXR);
+  renderer.setAnimationLoop((t, frame) => {
+    const dt = Math.min(clock.getDelta(), 0.05), time = clock.elapsedTime;
+    const xc = renderer.xr.getCamera(); viewCam = xc.cameras?.[0] || xc;
+    if (frame && !xrH.placed) {
+      const hits = frame.getHitTestResults(xrH.hitSource);
+      if (hits.length) { reticle.matrix.fromArray(hits[0].getPose(renderer.xr.getReferenceSpace()).transform.matrix); reticle.visible = true; }
+      else reticle.visible = false;
+    }
+    if (frame && xrH.n++ % 2 === 0) grabCamFrame(frame);
+    if (xrH.noCam > 90 && !xrH.warned) { xrH.warned = true; tip('جوالك لا يعطي صورة الكاميرا هنا، فتتبّع اليد متوقف. اللمس يعمل.'); }
+    if (handsOn) detectHand();
+    estimateLight(dt);
+    frameStep(dt, time);
+    renderer.render(scene, camera);
+  });
+}
+function placeScene(){
+  if (!reticle.visible) { toast('حرّك الجوال ببطء نحو الأرض حتى تظهر الدائرة', 1800); return; }
+  const p = new THREE.Vector3().setFromMatrixPosition(reticle.matrix);
+  setFloor(p.y);
+  ground.position.set(p.x, p.y, p.z); sun.target.position.copy(p);
+  if (entities.length) {
+    const cx = entities.reduce((a, e) => a + e.x, 0) / entities.length, cz = entities.reduce((a, e) => a + e.z, 0) / entities.length;
+    for (const e of entities) { e.x += p.x - cx; e.z += p.z - cz; e.home = { x: e.x, z: e.z }; }
+  }
+  xrH.placed = true; reticle.visible = false; entGroup.visible = true; ground.visible = true;
+  if (!entities.length) addEntity(current);
+  hint(DEF_HINT); toast('ثُبّت المشهد على أرضك. تقدر تمشي حوله.', 2200);
+}
+function endHandsXR(){
+  renderer.setAnimationLoop(null); renderer.xr.enabled = false;
+  camEl.removeEventListener('beforexrselect', noSelect);
+  xrH = null; viewCam = camera; setFloor(0);
+  ground.position.set(0, 0, 0); ground.visible = true; sun.target.position.set(0, 0, 0); entGroup.visible = true; if (reticle) reticle.visible = false;
+  camEl.classList.remove('xr', 'clean');
+  camActive = false; handsOn = false; hand = null; hctx.clearRect(0, 0, innerWidth, innerHeight);
+  for (const e of entities) if (isHeld(e)) release(e);
+  camEl.hidden = true; $('studio').hidden = false;
+}
+
 /* ---------- hand tracking (camera mode) ---------- */
 let handsOn = false, landmarker = null, landmarkerP = null, lastVT = -1, hand = null;
 const MP = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
@@ -1242,8 +1382,9 @@ function videoCover(){
 }
 function readHand(lms, t){
   if (!filters) resetFilters();
-  const cv = videoCover();
-  const p = lms.map((l, i) => ({ x: filters[i * 2].f(l.x * cv.vw * cv.s + cv.dx, t), y: filters[i * 2 + 1].f(l.y * cv.vh * cv.s + cv.dy, t) }));
+  const cv = xrH ? { vw: 1, vh: 1, s: 0, dx: 0, dy: 0 } : videoCover();
+  const map = xrH ? (l => [l.x * innerWidth, l.y * innerHeight]) : (l => [l.x * cv.vw * cv.s + cv.dx, l.y * cv.vh * cv.s + cv.dy]);   /* the AR camera image already lines up with the screen */
+  const p = lms.map((l, i) => { const [x, y] = map(l); return { x: filters[i * 2].f(x, t), y: filters[i * 2 + 1].f(y, t) }; });
   const size = d2(p[0], p[9]) || 1;
   const palmIdx = [0, 5, 9, 13, 17];
   const palm = { x: palmIdx.reduce((a, i) => a + p[i].x, 0) / 5, y: palmIdx.reduce((a, i) => a + p[i].y, 0) / 5 };
@@ -1258,11 +1399,13 @@ function drawHand(){
   for (const i of [4, 8, 12, 16, 20]) { hctx.beginPath(); hctx.arc(hand.p[i].x, hand.p[i].y, 3, 0, 7); hctx.fill(); }
 }
 function detectHand(){
-  if (!landmarker || video.readyState < 2 || video.currentTime === lastVT) return;
-  lastVT = video.currentTime;
+  if (!landmarker) return;
+  let src;
+  if (xrH) { if (!xrCam.fresh) return; xrCam.fresh = false; src = xrCam.canvas; }
+  else { if (video.readyState < 2 || video.currentTime === lastVT) return; lastVT = video.currentTime; src = video; }
   const t = performance.now() / 1000;
   let lms = null;
-  try { lms = landmarker.detectForVideo(video, performance.now()).landmarks?.[0] || null; } catch {}
+  try { lms = landmarker.detectForVideo(src, performance.now()).landmarks?.[0] || null; } catch {}
   if (lms) { lostFrames = 0; hand = readHand(lms, t); }
   else if (++lostFrames > 3) { hand = null; resetFilters(); }      /* ride out a few dropped frames */
   drawHand();
@@ -1272,7 +1415,7 @@ const occ = $('occ'), octx = occ.getContext('2d');
 const FINGERS = [[1,2],[2,3],[3,4],[5,6],[6,7],[7,8],[9,10],[10,11],[11,12],[0,1],[0,5],[5,9]];
 function drawOcclusion(){
   octx.clearRect(0, 0, innerWidth, innerHeight);
-  if (!handsOn || !hand || !entities.some(e => e.mode === 'grab') || !video.videoWidth) return;
+  if (xrH || !handsOn || !hand || !entities.some(e => e.mode === 'grab') || !video.videoWidth) return;
   octx.save();
   octx.lineCap = 'round'; octx.lineJoin = 'round'; octx.strokeStyle = '#fff';
   for (const [a, b] of FINGERS) {
@@ -1294,6 +1437,7 @@ const grainCanvas = (() => {
 /* capture: camera frame (cover-cropped) + 3D layer */
 let lastBlob = null, lastURL = null;
 $('shutter').addEventListener('click', async () => {
+  if (xrH) { camEl.classList.add('clean'); toast('خذ لقطة شاشة الآن (زر التشغيل + خفض الصوت)', 2400); setTimeout(() => camEl.classList.remove('clean'), 5500); return; }
   renderer.render(scene, camera);
   const W = gl.width, H = gl.height, out = document.createElement('canvas');
   out.width = W; out.height = H; const c = out.getContext('2d');
@@ -1459,6 +1603,18 @@ $('sfTokenGo').addEventListener('click', () => {
 });
 $('sfForm').addEventListener('submit', e => { e.preventDefault(); sfMeta = { label: '', size: 1 }; [...$('sfCats').children].forEach(b => b.setAttribute('aria-pressed', 'false')); sfSearch($('sfQ').value); });
 $('sfAnim').addEventListener('change', () => sfSearch($('sfQ').value));
+
+/* ---------- portrait / landscape ---------- */
+async function toggleOrientation(){
+  const toLand = !(screen.orientation?.type || '').startsWith('landscape');
+  try {
+    if (!document.fullscreenElement) await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+    await screen.orientation.lock(toLand ? 'landscape' : 'portrait');
+  } catch { toast('اقلب الجوال، وتأكد أن التدوير التلقائي مفعّل في إعدادات الجوال', 2800); }
+}
+document.querySelectorAll('.rotate-btn').forEach(b => b.addEventListener('click', toggleOrientation));
+const onTurn = () => { if (typeof yaw0 !== 'undefined') yaw0 = null; if (renderer && !xrH) resize(); };
+screen.orientation?.addEventListener?.('change', onTurn); addEventListener('orientationchange', onTurn);
 
 /* ---------- settings ---------- */
 $('openSettings').addEventListener('click', () => { $('meshyKey').value = store.get('meshyKey', ''); $('sfToken').value = store.get('sfToken', ''); $('setSheet').hidden = false; });
