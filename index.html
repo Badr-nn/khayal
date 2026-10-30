@@ -237,6 +237,9 @@ model-viewer{width:100%;height:100%;--poster-color:transparent;background:transp
     </div>
     <button class="shutter" id="shutter" aria-label="التقاط"><i></i></button>
     <div class="side end">
+      <button class="round glass" id="camFight" aria-label="عراك بين المجسّمات" aria-pressed="false" style="opacity:.5">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l9 9M20 4l-9 9M7 14l-3 3 3 3 3-3M17 14l3 3-3 3-3-3"/></svg>
+      </button>
       <button class="round glass" id="camAnchor" aria-label="تثبيت المجسّمات في مكانها" aria-pressed="false" style="opacity:.5">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/></svg>
       </button>
@@ -406,7 +409,7 @@ async function loadUserModels(){
     const recs = await idb.all();
     for (const r of recs || []) {
       const url = r.blob ? URL.createObjectURL(r.blob) : r.url;
-      assets.push(savedYaw({ id: r.id, name: r.name, url, mine: true, size: r.size || 1, fly: r.fly, quad: r.quad, credit: r.credit }));
+      assets.push(savedYaw({ id: r.id, name: r.name, url, mine: true, size: r.size || 1, fly: r.fly, quad: r.quad, fierce: r.fierce, credit: r.credit }));
     }
   } catch {}
 }
@@ -697,7 +700,7 @@ async function addEntity(a){
   const sp = spawnSpot();
   const e = { a, g, yg, m, h, w, sx: sz.x, sz: sz.z, blob, fly: !!a.fly, quad: !!a.quad, yawOff: a.yaw || 0,
     x: sp.x, y: 0, z: sp.z, rotY: -(a.yaw || 0), scale: 1, vx: 0, vy: 0, vz: 0, mode: 'floor',
-    lostT: 0, palmT: 0, pokeCD: 0, waveCD: 1.5, reactT: 0, turning: false, goal: null,
+    lostT: 0, palmT: 0, pokeCD: 0, waveCD: 1.5, reactT: 0, turning: false, goal: null, spd: 0, fast: false, cmd: false, nodT: 0, thinkT: 0, fight: null, fmove: false, pend: null, ai: null,
     tx: 0, tz: 0, wx: 0, wz: 0, pvx: 0, pvz: 0, settle: 0, settleV: 0,
     ride: null, rideOff: null, rideRot: 0, lookYaw: 0, lookPitch: 0, glanceT: 2 + Math.random() * 3, glanceYaw: 0, glancePitch: 0, glanceHold: 0,
     hover: 0.6 + Math.random() * 0.35, bob: Math.random() * 6, home: { x: sp.x, z: sp.z },
@@ -718,6 +721,8 @@ async function addEntity(a){
     e.acts.jump = find(/^jump|walkjump/i);
     e.acts.wave = find(/wave/i);
     e.acts.happy = find(/^yes|thumbs/i);
+    e.acts.attack = find(/punch|attack|bite|strike|claw/i);
+    e.acts.hit = find(/hit|hurt|damage|recoil/i);
     if (e.fly) e.acts.idle = find(/fly|flap/i) || e.acts.idle || e.mixer.clipAction(gltf.animations[0]);
     if (!e.acts.idle && !e.acts.run) e.acts.idle = e.mixer.clipAction(gltf.animations[0]);
     if (e.fly) e.acts.idle.timeScale = 0.8 + Math.random() * 0.4;
@@ -733,17 +738,19 @@ function removeEntity(e){
   if (!e) return;
   entGroup.remove(e.g); entGroup.remove(e.blob); entities.splice(entities.indexOf(e), 1);
   for (const r of entities) if (r.ride === e) { r.ride = null; r.mode = 'air'; r.vy = 0; }
+  if (e.fight) endFight(e.fight, false);
   selected = entities[entities.length - 1] || null;
 }
 function setBase(e){
   if (!e.mixer || e.once) return;
   let want = e.acts.idle;
   if (e.fly) want = e.acts.idle;
-  else if (e.mode === 'walk') want = e.acts.walk || e.acts.run || e.acts.idle;
+  else if (e.mode === 'walk') want = (e.fast ? e.acts.run : e.acts.walk) || e.acts.walk || e.acts.run || e.acts.idle;
+  else if (e.mode === 'fight') want = e.fmove ? ((e.fight?.phase === 'lunge' && e.fight.turn === e ? e.acts.run : e.acts.walk) || e.acts.run || e.acts.idle) : e.acts.idle;
   else if (e.mode === 'air' || e.mode === 'grab' || e.mode === 'hop' || e.reactT > 0) want = e.acts.run || e.acts.idle;
   else if (e.turning) want = e.acts.walk || e.acts.idle;
   if (want === e.cur) return;
-  if (want) { want.reset(); want.setLoop(THREE.LoopRepeat); want.fadeIn(0.3).play(); }
+  if (want) { want.reset(); want.timeScale = 1; want.setLoop(THREE.LoopRepeat); want.fadeIn(0.3).play(); }
   e.cur?.fadeOut(0.3); e.cur = want;
 }
 function playOnce(e, act){
@@ -794,9 +801,17 @@ function grabStart(e, mode){
   else e.mode = mode;
 }
 function release(e){
-  e.mode = e.fly ? 'floor' : 'air'; e.lostT = 0;
-  /* keep the hand's momentum: a quick flick throws it */
-  e.vx = clamp(e.pvx * 0.85, -4, 4); e.vz = clamp(e.pvz * 0.85, -4, 4); e.vy = clamp((e.pvy || 0) * 0.85, -3, 4);
+  const was = e.mode; e.mode = e.fly ? 'floor' : 'air'; e.lostT = 0;
+  /* use the hand's motion from just before it opened/closed; the closing itself is noise */
+  const vh = (e.vh || []).slice(0, -4), n = vh.length || 1;
+  let vx = vh.reduce((a, v) => a + v.x, 0) / n, vy = vh.reduce((a, v) => a + v.y, 0) / n, vz = vh.reduce((a, v) => a + v.z, 0) / n;
+  const sp = Math.hypot(vx, vz);
+  if (sp < 0.8) vx = vz = 0; else { const k = Math.min(1, 2.2 / sp); vx *= k; vz *= k; }   /* only a real flick throws */
+  vy = vy > 1.2 ? Math.min(vy, 3) : 0;
+  e.vx = vx; e.vz = vz; e.vy = vy; e.vh = [];
+  if (was === 'hand' && !e.fly && !vx && !vz && !vy) {           /* otherwise it steps off your palm */
+    const f = e.rotY + e.yawOff; e.vx = Math.sin(f) * 0.55; e.vz = Math.cos(f) * 0.55; e.vy = 1.1; playOnce(e, e.acts.jump);
+  }
   if (e.fly) { e.home = { x: e.x, z: e.z }; e.vy = Math.max(e.vy, 0.8); }
 }
 function poke(e, from){
@@ -842,6 +857,7 @@ function updateEntities(dt, time){
     handSeenT = hand ? handSeenT + dt : 0;
     if (hand && handSeenT > 0.3 && handSeenT - dt <= 0.3)       /* notice a hand the moment it appears */
       for (const e of entities) if (e.acts.wave && e.waveCD <= 0 && e.mode === 'floor') { playOnce(e, e.acts.wave); e.waveCD = 8; }
+    if (hand && !held) gestureStep(dt, time);
     if (hand && !held) {
       const pe = hand.pinch ? entityAt(hand.pinchPt) : null;
       if (pe) { grabStart(pe, 'grab'); held = pe; callT = 0; }
@@ -849,11 +865,11 @@ function updateEntities(dt, time){
         const over = entityAt(hand.palm, 0.1, e => e.mode !== 'air');
         const cand = over;
         for (const o of entities) if (o !== cand) o.palmT = 0;
-        if (cand) { cand.palmT += dt; if (cand.palmT > (cand.fly ? 0.8 : 0.5)) { grabStart(cand, 'hand'); held = cand; } }
+        if (cand && G.speed < hand.size * 2.2 && cand.mode !== 'fight') { cand.palmT += dt; if (cand.palmT > (cand.fly ? 0.8 : 0.5)) { grabStart(cand, 'hand'); held = cand; } }   /* a waving hand is not an invitation */
       } else {
         callT = 0; for (const o of entities) o.palmT = 0;
         const pk = !hand.pinch ? entityAt(hand.tip, -0.05) : null;
-        if (pk && pk.pokeCD <= 0 && pk.mode !== 'air') poke(pk, hand.tip);
+        if (pk && pk.pokeCD <= 0 && pk.mode !== 'air') { if (pk.fight) endFight(pk.fight, false); poke(pk, hand.tip); }
       }
     } else if (!hand) callT = 0;
 
@@ -877,10 +893,11 @@ function updateEntities(dt, time){
             held.y = f.y + (held.tgt.y - f.y) * s + Math.sin(Math.PI * u) * held.h * held.scale * 0.45;
             if (u >= 1) { held.mode = 'hand'; held.settleV -= 2; }
           } else {
-            const k = Math.min(1, dt * (held.fly ? 3.5 : 18));
+            const k = Math.min(1, dt * (held.fly ? 3.5 : 30));   /* stick to the palm, no sliding */
             held.x += (held.tgt.x - held.x) * k; held.y += (held.tgt.y - held.y) * k; held.z += (held.tgt.z - held.z) * k;
           }
         }
+        (held.vh ||= []).push({ x: (held.x - px) / dt, y: (held.y - py) / dt, z: (held.z - pz) / dt }); if (held.vh.length > 12) held.vh.shift();
         const a = Math.min(1, dt * 12);
         held.pvx += ((held.x - px) / dt - held.pvx) * a; held.pvz += ((held.z - pz) / dt - held.pvz) * a; held.pvy = ((held.pvy || 0) + ((held.y - py) / dt - (held.pvy || 0)) * a);
       }
@@ -888,14 +905,21 @@ function updateEntities(dt, time){
     if (mountMsgT > 0) { mountMsgT -= dt; tip(mountMsg + '!'); }
     else if (held?.mode === 'hand' || held?.mode === 'hop') tip(held.fly ? held.a.name + ' على كفّك. <b>اقبض يدك</b> ليطير' : 'على كفّك. قرّب يدك وبعّدها، أو ضعه فوق مجسّم آخر و<b>اقبض</b> ليركبه');
     else if (held?.mode === 'grab') tip('ممسوك. هزّه برفق، أو ضعه فوق مجسّم آخر و<b>افتح أصابعك</b>');
-    else if (entities.some(e => e.mode === 'walk')) tip('قادم إليك… أبقِ كفّك مفتوحة');
-    else if (hand) tip('<b>المسه</b> ليرتد · <b>افتح كفّك</b> عنده ليصعد عليها · <b>اقرصه</b> لتحمله');
+    else if (hand) tip('<b>المسه</b> · <b>كفّك</b> عنده · <b>اقرصه</b> · <b>لوّح</b> · <b>ناده</b> بأصابعك · <b>أشر</b> للأرض · <b>إبهام لأعلى</b>');
     else tip('أدخل يدك أمام الكاميرا');
   } else if (mountMsgT > 0) { mountMsgT -= dt; hint(mountMsg); if (mountMsgT <= 0) hint(DEF_HINT); }
 
+  for (const F of [...fights]) fightStep(F, dt);
+  if (markerT > 0) { markerT -= dt; marker.material.opacity = Math.min(1, markerT); if (markerT <= 0) marker.visible = false; }
   for (const e of entities) {
-    e.pokeCD -= dt; e.waveCD -= dt; if (e.reactT > 0) e.reactT -= dt;
+    e.pokeCD -= dt; e.waveCD -= dt; if (e.reactT > 0) e.reactT -= dt; if (e.nodT > 0) e.nodT -= dt; if (e.thinkT > 0) e.thinkT -= dt;
+    if (e.pend && (e.pend.t -= dt) <= 0) { react(e, e.pend.k); e.pend = null; }
+    brainStep(e, dt);
     if (isHeld(e)) { /* follows the hand */ }
+    else if (e.mode === 'fight') {
+      e.x += e.vx * dt; e.z += e.vz * dt; const f = Math.pow(0.02, dt); e.vx *= f; e.vz *= f;
+      if (e.y > 0 || e.vy > 0) { e.vy -= 9.8 * dt; e.y += e.vy * dt; if (e.y <= 0) { e.y = 0; e.settleV += e.vy * 0.6; e.vy = 0; } }
+    }
     else if (e.mode === 'ride') {
       const o = e.ride;
       if (!o || !entities.includes(o)) { e.mode = 'air'; e.ride = null; }
@@ -916,10 +940,13 @@ function updateEntities(dt, time){
         const dx = e.goal.x - e.x, dz = e.goal.z - e.z, d = Math.hypot(dx, dz);
         const turn = wrap(Math.atan2(dx, dz) - (e.rotY + e.yawOff));
         e.rotY += clamp(turn, -2.6 * dt, 2.6 * dt);
-        if (d < e.w * e.scale * 0.45 + 0.08) { e.mode = 'floor'; e.goal = null; }
-        else if (Math.abs(turn) < 0.9) {
-          const sp = (e.quad ? 0.95 : 0.6) * e.scale * Math.min(1, d * 2) * (1 - Math.abs(turn) / 0.9 * 0.6);
-          e.x += Math.sin(e.rotY + e.yawOff) * sp * dt; e.z += Math.cos(e.rotY + e.yawOff) * sp * dt;
+        const base = (e.quad ? 0.9 : 0.55) * e.scale * (e.fast ? 2.3 : 1);
+        if (d < 0.06 + e.spd * 0.15) { e.mode = 'floor'; e.goal = null; e.spd = 0; arrived(e); }
+        else {
+          const want = base * Math.min(1, d * 1.6) * Math.max(0, 1 - Math.abs(turn) / 1.1);   /* slow into turns, ease into the stop */
+          e.spd = (e.spd || 0) + clamp(want - (e.spd || 0), -2.4 * dt, 1.5 * dt);
+          e.x += Math.sin(e.rotY + e.yawOff) * e.spd * dt; e.z += Math.cos(e.rotY + e.yawOff) * e.spd * dt;
+          if (e.cur && (e.cur === e.acts.walk || e.cur === e.acts.run)) e.cur.timeScale = clamp(e.spd / base, 0.55, 1.4);   /* feet match the ground */
         }
       }
     } else {
@@ -930,8 +957,8 @@ function updateEntities(dt, time){
           if (sup.o && sup.h > 0.02) mount(e, sup.o);
           else {
             e.y = 0; e.settleV += e.vy * 0.9;                       /* knees absorb the landing */
-            if (e.vy < -2.2) { e.vy = -e.vy * 0.18; e.vx *= 0.5; e.vz *= 0.5; }
-            else { e.vy = 0; e.mode = 'floor'; }
+            if (e.vy < -2.2 && !e.mixer && !e.head) { e.vy = -e.vy * 0.18; e.vx *= 0.5; e.vz *= 0.5; }   /* objects bounce, creatures land */
+            else { e.vy = 0; e.mode = 'floor'; e.home = { x: e.x, z: e.z }; }
           }
         }
       } else if (Math.abs(e.vx) + Math.abs(e.vz) > 0.01) {         /* slide to a stop */
@@ -951,6 +978,174 @@ function updateEntities(dt, time){
   }
 }
 
+/* ---------- a life of their own: wander, look around, think, meet, fight ----------
+   A small state machine per character (idle → wander / look / think / social / fight), steering toward goals
+   with gentle acceleration, walk cycles sped up or slowed to match ground speed so feet don't skate. */
+const FIERCE_RE = /lion|tiger|wolf|bear|dino|rex|raptor|mammoth|panther|leopard|أسد|نمر|ذئب|دب|ديناصور|ماموث/i;
+let fightAll = false;
+const fights = [];
+const canAct = e => !e.fly && (e.mode === 'floor' || (e.mode === 'walk' && !e.cmd));
+function nearestOther(e, maxD, pred){
+  let best = null, bd = maxD;
+  for (const o of entities) { if (o === e || o.fly || !pred(o)) continue; const d = Math.hypot(o.x - e.x, o.z - e.z); if (d < bd) { bd = d; best = o; } }
+  return best;
+}
+function walkTo(e, x, z, fast = false, cmd = false){ e.goal = { x, z }; e.mode = 'walk'; e.fast = fast; e.cmd = cmd; }
+function brainStep(e, dt){
+  const ai = e.ai ||= { state: 'idle', t: 1 + Math.random() * 3, cd: 3 + Math.random() * 4, focus: null, focusT: 0 };
+  ai.cd -= dt;
+  if (ai.focusT > 0) { ai.focusT -= dt; if (ai.focusT <= 0) ai.focus = null; }
+  if (e.fly) {                                    /* birds drift to a new hover spot now and then */
+    ai.t -= dt;
+    if (ai.t <= 0 && e.mode === 'floor') { ai.t = 4 + Math.random() * 5; const a = Math.random() * 6.28, r = 0.3 + Math.random() * 0.8; e.home = { x: e.home.x * 0.5 + (e.x + Math.cos(a) * r) * 0.5, z: e.home.z * 0.5 + (e.z + Math.sin(a) * r) * 0.5 }; e.hover = 0.45 + Math.random() * 0.5; }
+    return;
+  }
+  if (!canAct(e) || e.mode === 'walk') return;
+  ai.t -= dt;
+  if (ai.cd <= 0 && (fightAll || e.a.fierce || FIERCE_RE.test(e.a.name + ' ' + (e.a.credit || '')))) {
+    const o = nearestOther(e, 3.2, o => canAct(o) && !o.fight && (o.ai?.cd ?? 0) <= 0);
+    if (o) { startFight(e, o); return; }
+  }
+  if (ai.t > 0) return;
+  const r = Math.random(), mate = nearestOther(e, 3, o => canAct(o) && !o.fight);
+  if (mate && r < 0.25) {
+    const dx = e.x - mate.x, dz = e.z - mate.z, d = Math.hypot(dx, dz) || 1, gap = (e.w * e.scale + mate.w * mate.scale) * 0.5 + 0.25;
+    walkTo(e, mate.x + dx / d * gap, mate.z + dz / d * gap); ai.state = 'social'; ai.mate = mate; ai.t = 99;
+  } else if (r < 0.62) {
+    const a = Math.random() * 6.28, rr = 0.35 + Math.random() * 0.9;
+    walkTo(e, e.home.x + Math.cos(a) * rr, e.home.z + Math.sin(a) * rr); ai.state = 'wander'; ai.t = 99;
+  } else if (r < 0.82 || e.quad) { ai.state = 'look'; ai.t = 2.5 + Math.random() * 3; e.glanceT = 0; }
+  else { ai.state = 'think'; ai.t = 3 + Math.random() * 3; e.thinkT = ai.t; }
+}
+function arrived(e){
+  if (e.cmd) { e.cmd = false; e.home = { x: e.x, z: e.z }; if (e.ai) { e.ai.state = 'look'; e.ai.t = 3; } return; }
+  const ai = e.ai; if (!ai) return;
+  if (ai.state === 'social' && ai.mate && entities.includes(ai.mate)) {
+    ai.focus = ai.mate; ai.focusT = 3.5;
+    if (ai.mate.ai) { ai.mate.ai.focus = e; ai.mate.ai.focusT = 3.5; }
+    if (!playOnce(e, e.acts.wave || e.acts.happy)) e.nodT = 0.9;
+  }
+  ai.state = 'look'; ai.t = 2 + Math.random() * 3; e.glanceT = 0.6;
+}
+
+function startFight(a, b){
+  const F = { a, b, phase: 'approach', rounds: 3 + (Math.random() * 3 | 0), turn: Math.random() < 0.5 ? a : b, dir: 1, pt: 0 };
+  for (const e of [a, b]) { e.fight = F; e.mode = 'fight'; e.goal = null; e.vx = e.vz = 0; }
+  fights.push(F);
+}
+function endFight(F, separate = true){
+  for (const e of [F.a, F.b]) {
+    if (e.fight !== F) continue;
+    e.fight = null; e.fmove = false; if (e.mode === 'fight') e.mode = 'floor';
+    if (e.ai) { e.ai.cd = 10 + Math.random() * 8; e.ai.state = 'look'; e.ai.t = 2; }
+  }
+  if (separate) for (const [e, o] of [[F.a, F.b], [F.b, F.a]]) {
+    if (!entities.includes(e) || e.mode !== 'floor') continue;
+    const dx = e.x - o.x, dz = e.z - o.z, d = Math.hypot(dx, dz) || 1;
+    walkTo(e, e.x + dx / d * 0.9, e.z + dz / d * 0.9); if (e.ai) e.ai.state = 'wander';
+  }
+  fights.splice(fights.indexOf(F), 1);
+}
+function fightStep(F, dt){
+  const { a, b } = F;
+  if (!entities.includes(a) || !entities.includes(b) || a.mode !== 'fight' || b.mode !== 'fight') { endFight(F, false); return; }
+  const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz) || 1e-3, nx = dx / d, nz = dz / d;
+  const ra = a.w * a.scale * 0.5, rb = b.w * b.scale * 0.5, D0 = (ra + rb) * 1.05 + 0.2;
+  for (const [e, s] of [[a, 1], [b, -1]]) e.rotY += clamp(wrap(Math.atan2(nx * s, nz * s) - e.yawOff - e.rotY), -4.5 * dt, 4.5 * dt);   /* always square up */
+  const step = (e, vx, vz) => { e.x += vx * dt; e.z += vz * dt; e.spd = Math.hypot(vx, vz); };
+  a.fmove = b.fmove = false;
+  if (F.phase === 'approach') {
+    if (d > D0) { const v = Math.min(0.9, (d - D0) * 2); step(a, nx * v, nz * v); step(b, -nx * v, -nz * v); a.fmove = b.fmove = true; }
+    else { F.phase = 'circle'; F.pt = 0.7 + Math.random() * 0.8; F.dir = Math.random() < 0.5 ? 1 : -1; }
+  } else if (F.phase === 'circle') {                 /* size each other up, sidestepping around */
+    F.pt -= dt;
+    const tx = -nz * F.dir, tz = nx * F.dir, v = 0.4, corr = (d - D0) * 1.5;
+    step(a, tx * v + nx * corr * 0.5, tz * v + nz * corr * 0.5); step(b, -tx * v - nx * corr * 0.5, -tz * v - nz * corr * 0.5);
+    a.fmove = b.fmove = true;
+    if (F.pt <= 0) { F.phase = 'lunge'; F.pt = 0.4; const t = F.turn; playOnce(t, t.acts.attack || t.acts.jump); t.vy = t.quad ? 1.7 : 1.0; }
+  } else if (F.phase === 'lunge') {                  /* pounce / strike */
+    const att = F.turn, def = att === a ? b : a, s = att === a ? 1 : -1;
+    F.pt -= dt; step(att, nx * s * 2.8, nz * s * 2.8); att.fmove = true;
+    if (d < (ra + rb) * 0.8 || F.pt <= 0) {
+      def.vx += nx * s * 1.8; def.vz += nz * s * 1.8;
+      def.wz -= nx * s * 8; def.wx += nz * s * 8; def.settleV -= 3; def.reactT = 0.5;
+      if (!playOnce(def, def.acts.hit)) def.nodT = 0.4;
+      att.vx -= nx * s * 0.7; att.vz -= nz * s * 0.7;
+      F.phase = 'recover'; F.pt = 0.5 + Math.random() * 0.4; F.turn = Math.random() < 0.65 ? def : att; F.rounds--;
+    }
+  } else {
+    F.pt -= dt;
+    if (F.pt <= 0) { if (F.rounds <= 0) { endFight(F); return; } F.phase = 'circle'; F.pt = 0.6 + Math.random() * 0.9; if (Math.random() < 0.5) F.dir *= -1; }
+  }
+}
+
+/* ---------- hand gestures beyond touch: wave, beckon, point, thumbs up ---------- */
+const G = { xs: [], flips: [], last: null, waveCD: 0, beckonCD: 0, pointT: 0, pointDone: false, thumbT: 0, thumbCD: 0, speed: 0 };
+let marker = null, markerT = 0;
+function showMarker(g){
+  if (!marker) { marker = new THREE.Mesh(new THREE.RingGeometry(0.12, 0.16, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xf0b44c, transparent: true, depthWrite: false })); entGroup.add(marker); }
+  marker.position.set(g.x, 0.006, g.z); marker.visible = true; markerT = 1.6;
+}
+function say(t){ mountMsg = t; mountMsgT = 2.2; }
+function commandWalker(g, prefer){
+  let e = prefer && !prefer.fly && (prefer.mode === 'floor' || prefer.mode === 'walk') ? prefer : null;
+  if (!e) { let bd = 1e9; for (const o of entities) if (!o.fly && (o.mode === 'floor' || o.mode === 'walk')) { const d = Math.hypot(o.x - g.x, o.z - g.z); if (d < bd) { bd = d; e = o; } } }
+  const bird = entities.find(o => o.fly && o.mode === 'floor');
+  if (!e && bird) { bird.home = { x: g.x, z: g.z }; return bird; }
+  if (!e) return null;
+  const dx = e.x - g.x, dz = e.z - g.z, d = Math.hypot(dx, dz) || 1, stop = e.w * e.scale * 0.5 + 0.15;
+  walkTo(e, g.x + dx / d * stop, g.z + dz / d * stop, d > 1.6, true);
+  return e;
+}
+function gestureStep(dt, now){
+  G.waveCD -= dt; G.beckonCD -= dt; G.thumbCD -= dt;
+  G.xs.push({ t: now, x: hand.palm.x, y: hand.palm.y }); while (G.xs.length && now - G.xs[0].t > 1.3) G.xs.shift();
+  const recent = G.xs.filter(s => now - s.t < 0.25);
+  G.speed = recent.length > 1 ? Math.hypot(recent.at(-1).x - recent[0].x, recent.at(-1).y - recent[0].y) / Math.max(0.05, recent.at(-1).t - recent[0].t) : 0;
+  /* wave: an open hand swinging side to side */
+  if (hand.open && G.waveCD <= 0 && G.xs.length > 6) {
+    const thr = hand.size * 0.4; let rev = 0, dir = 0, ext = G.xs[0].x;
+    for (const s of G.xs) {
+      if (!dir) { if (Math.abs(s.x - ext) > thr) { dir = Math.sign(s.x - ext); ext = s.x; } continue; }
+      if ((s.x - ext) * dir > 0) ext = s.x; else if (Math.abs(s.x - ext) > thr) { rev++; dir = -dir; ext = s.x; }
+    }
+    if (rev >= 2) {
+      G.waveCD = 3; G.xs = [];
+      for (const e of entities) if (!isHeld(e) && e.mode !== 'fight') e.pend = { k: 'wave', t: Math.random() * 0.5 };
+      say('ردّوا التحية');
+    }
+  }
+  /* beckon: fingers curl in and open again, twice */
+  const st = hand.open ? 'o' : hand.curled ? 'c' : null;
+  if (st && st !== G.last) { G.flips.push({ t: now, s: st }); G.last = st; }
+  while (G.flips.length && now - G.flips[0].t > 1.8) G.flips.shift();
+  if (G.beckonCD <= 0 && G.flips.filter(f => f.s === 'c').length >= 2 && G.flips.at(-1)?.s === 'o') {
+    G.beckonCD = 2.5; G.flips = [];
+    let g = floorPoint(hand.palm.x, hand.palm.y + hand.size * 1.0);
+    if (!g || g.distanceTo(camPos()) > 6) { viewCam.getWorldDirection(_n); _n.y = 0; _n.normalize(); g = camPos().clone().addScaledVector(_n, 1.1); }
+    const e = commandWalker(g, null);
+    if (e) say(e.a.name + ' قادم إليك');
+  }
+  /* point at the floor and hold: go there */
+  if (hand.point && !entityAt(hand.tip)) {
+    G.pointT += dt;
+    if (G.pointT > 0.7 && !G.pointDone) {
+      G.pointDone = true;
+      const g = floorPoint(hand.tip.x, hand.tip.y);
+      if (g && g.distanceTo(camPos()) < 8) { const e = commandWalker(g, selected); if (e) { showMarker(g); say(e.a.name + ' يذهب إلى هناك'); } }
+    }
+  } else { G.pointT = 0; G.pointDone = false; }
+  /* thumbs up: they're pleased */
+  if (hand.thumbsUp) {
+    G.thumbT += dt;
+    if (G.thumbT > 0.45 && G.thumbCD <= 0) { G.thumbCD = 3; for (const e of entities) if (!isHeld(e) && e.mode !== 'fight') e.pend = { k: 'thumb', t: Math.random() * 0.4 }; say('أعجبهم ذلك'); }
+  } else G.thumbT = 0;
+}
+function react(e, k){
+  if (k === 'wave') { if (!playOnce(e, e.acts.wave) && !playOnce(e, e.acts.happy)) e.nodT = 0.9; }
+  else if (k === 'thumb') { if (!playOnce(e, e.acts.happy)) { if (!e.fly && !e.quad && e.mode === 'floor') { e.vy = 1.0; e.mode = 'air'; } else e.nodT = 0.9; } }
+}
+
 /* heads (and bodies) turn toward the hand, the camera, or the nearest neighbour */
 const _q = new THREE.Quaternion(), _qp = new THREE.Quaternion(), _qy = new THREE.Quaternion(), _R = new THREE.Quaternion(), _t = new THREE.Quaternion();
 const _f = new THREE.Vector3(), _ax = new THREE.Vector3(), _c = new THREE.Vector3(), _o = new THREE.Vector3();
@@ -965,16 +1160,10 @@ function lookStep(e, dt){
   let T = null;
   const H = e.h * e.scale;
   if (e.mode === 'hand' || e.mode === 'grab' || e.mode === 'hop') T = _o.copy(camPos()).setY(camPos().y - FLOOR);
-  else if (e.mode === 'walk' && e.goal) T = _o.set(e.goal.x, H * 0.9, e.goal.z);
-  else if (handsOn && hand) T = worldAtLocal(hand.open ? hand.palm.x : hand.tip.x, hand.open ? hand.palm.y : hand.tip.y, _c.set(e.x, e.y + H * 0.9, e.z));
-  else {
-    let bd = 2.2;
-    for (const o of entities) {
-      if (o === e || o === e.ride || o.ride === e) continue;
-      const d = Math.hypot(o.x - e.x, o.z - e.z);
-      if (d < bd) { bd = d; T = _o.set(o.x, o.y + o.h * o.scale * 0.8, o.z); }
-    }
-  }
+  else if (e.fight) { const o = e.fight.a === e ? e.fight.b : e.fight.a; T = _o.set(o.x, o.y + o.h * o.scale * 0.75, o.z); }
+  else if (handsOn && hand && !(e.mode === 'walk' && !e.cmd)) T = worldAtLocal(hand.open ? hand.palm.x : hand.tip.x, hand.open ? hand.palm.y : hand.tip.y, _c.set(e.x, e.y + H * 0.9, e.z));
+  else if (e.ai?.focus && entities.includes(e.ai.focus)) { const o = e.ai.focus; T = _o.set(o.x, o.y + o.h * o.scale * 0.8, o.z); }
+  else if (e.mode === 'walk' && e.goal) T = _o.set(e.goal.x, H * 0.8, e.goal.z);
   let yawT = 0, pitchT = 0; e.turning = false;
   if (T) {
     const dx = T.x - e.x, dz = T.z - e.z, dy = T.y - (e.y + H * 0.9), ang = Math.atan2(dx, dz);
@@ -988,8 +1177,9 @@ function lookStep(e, dt){
   } else {
     /* nothing to watch: occasional idle glances, like a living thing */
     e.glanceT -= dt;
-    if (e.glanceT <= 0) { e.glanceT = 3 + Math.random() * 4; e.glanceHold = 0.8 + Math.random() * 1.2; e.glanceYaw = (Math.random() * 2 - 1) * 0.7; e.glancePitch = (Math.random() * 2 - 1) * 0.15; }
+    if (e.glanceT <= 0) { e.glanceT = (e.ai?.state === 'look' ? 0.9 : 3) + Math.random() * 3; e.glanceHold = 0.8 + Math.random() * 1.2; e.glanceYaw = (Math.random() * 2 - 1) * 0.7; e.glancePitch = (Math.random() * 2 - 1) * 0.15; }
     if (e.glanceHold > 0) { e.glanceHold -= dt; yawT = e.glanceYaw; pitchT = e.glancePitch; }
+    if (e.thinkT > 0) { yawT = 0.2 * Math.sin(e.thinkT * 0.9); pitchT = (e.thinkT % 2.4) > 1.2 ? -0.32 : 0.18; }   /* gaze down, then up: mulling it over */
   }
   /* eyes lead, head follows: fast to start, eases in at the end */
   const k = Math.min(1, dt * (Math.abs(yawT - e.lookYaw) > 0.4 ? 9 : 5));
@@ -997,7 +1187,8 @@ function lookStep(e, dt){
   if (!e.head) return;
   const fy = e.rotY + e.yawOff + e.lookYaw;
   _f.set(Math.sin(fy), 0, Math.cos(fy)); _ax.crossVectors(_f, UP).normalize();
-  _qy.setFromAxisAngle(UP, e.lookYaw); _R.setFromAxisAngle(_ax, e.lookPitch).multiply(_qy);
+  const nod = e.nodT > 0 ? Math.sin((0.9 - e.nodT) * 14) * 0.26 : 0;
+  _qy.setFromAxisAngle(UP, e.lookYaw); _R.setFromAxisAngle(_ax, e.lookPitch + nod).multiply(_qy);
   if (e.neck) { rotateBoneWorld(e.neck, _R, 0.4); rotateBoneWorld(e.head, _R, 0.6); }
   else rotateBoneWorld(e.head, _R, 1);
 }
@@ -1125,6 +1316,12 @@ $('camReset').addEventListener('click', () => {
   state.tilt = 32; $('tilt').value = 32; yaw0 = null; if (!gyroOn) placeCamera(); addEntity(current);
 });
 $('tilt').addEventListener('input', e => { state.tilt = +e.target.value; if (!gyroOn) placeCamera(); });
+$('camFight').addEventListener('click', e => {
+  fightAll = !fightAll; e.currentTarget.setAttribute('aria-pressed', fightAll); e.currentTarget.style.opacity = fightAll ? 1 : .5;
+  if (fightAll) for (const o of entities) if (o.ai) o.ai.cd = Math.random();
+  else for (const F of [...fights]) endFight(F);
+  toast(fightAll ? 'وضع العراك: المجسّمات القريبة من بعضها ستتعارك' : 'انتهى العراك', 2000);
+});
 $('camAnchor').addEventListener('click', () => {
   if (!gyroAvail) { toast('مستشعر الدوران غير متاح في هذا المتصفح', 2200); return; }
   setGyro(!gyroOn); toast(gyroOn ? 'مثبّت: لفّ الجوال، والمجسّمات تبقى مكانها' : 'أُلغي التثبيت', 1800);
@@ -1363,7 +1560,7 @@ function initHands(){
 }
 /* One Euro filter: removes jitter when the hand is still, stays responsive when it moves fast */
 class OneEuro {
-  constructor(minCut = 1.4, beta = 0.012, dCut = 1){ this.mc = minCut; this.b = beta; this.dc = dCut; this.x = null; this.dx = 0; this.t = 0; }
+  constructor(minCut = 2.0, beta = 0.02, dCut = 1){ this.mc = minCut; this.b = beta; this.dc = dCut; this.x = null; this.dx = 0; this.t = 0; }
   static a(c, dt){ const r = 2 * Math.PI * c * dt; return r / (r + 1); }
   f(v, t){
     if (this.x === null) { this.x = v; this.t = t; return v; }
@@ -1388,9 +1585,12 @@ function readHand(lms, t){
   const size = d2(p[0], p[9]) || 1;
   const palmIdx = [0, 5, 9, 13, 17];
   const palm = { x: palmIdx.reduce((a, i) => a + p[i].x, 0) / 5, y: palmIdx.reduce((a, i) => a + p[i].y, 0) / 5 };
-  const ext = [[8, 6], [12, 10], [16, 14], [20, 18]].filter(([tp, j]) => d2(p[tp], p[0]) > d2(p[j], p[0]) * 1.15).length;
+  const fx = [[8, 6], [12, 10], [16, 14], [20, 18]].map(([tp, j]) => d2(p[tp], p[0]) > d2(p[j], p[0]) * 1.15);
+  const ext = fx.filter(Boolean).length;
   const pinch = d2(p[4], p[8]) < size * 0.33;
-  return { p, size, palm, open: ext >= 3 && !pinch, fist: ext === 0 && !pinch, pinch, pinchPt: { x: (p[4].x + p[8].x) / 2, y: (p[4].y + p[8].y) / 2 }, tip: p[8] };
+  const thumbsUp = ext === 0 && d2(p[4], p[9]) > size * 0.85 && p[4].y < p[5].y - size * 0.35;
+  return { p, size, palm, open: ext >= 3 && !pinch, fist: ext === 0 && !pinch && !thumbsUp, curled: ext <= 1 && !pinch, thumbsUp,
+    point: fx[0] && !fx[1] && !fx[2] && !fx[3] && !pinch, pinch, pinchPt: { x: (p[4].x + p[8].x) / 2, y: (p[4].y + p[8].y) / 2 }, tip: p[8] };
 }
 function drawHand(){
   hctx.clearRect(0, 0, innerWidth, innerHeight);
@@ -1470,9 +1670,9 @@ $('saveShot').addEventListener('click', async () => {
 /* ---------- realistic models from Sketchfab ---------- */
 /* label, search words, size in this scene's metres (≈0.63 of real life, matching the people), flags */
 const CATS = [
-  ['حصان', 'horse', 1.5, { quad: true }], ['أسد', 'lion', 1.35, { quad: true }], ['نمر', 'tiger', 1.45, { quad: true }],
-  ['فيل', 'elephant', 3.0, { quad: true }], ['ذئب', 'wolf', 0.95, { quad: true }], ['غزال', 'deer', 1.1, { quad: true }],
-  ['دب', 'bear', 1.4, { quad: true }], ['ماموث', 'mammoth', 3.4, { quad: true }], ['ديناصور', 'dinosaur', 3.0, { quad: true }],
+  ['حصان', 'horse', 1.5, { quad: true }], ['أسد', 'lion', 1.35, { quad: true, fierce: true }], ['نمر', 'tiger', 1.45, { quad: true, fierce: true }],
+  ['فيل', 'elephant', 3.0, { quad: true }], ['ذئب', 'wolf', 0.95, { quad: true, fierce: true }], ['غزال', 'deer', 1.1, { quad: true }],
+  ['دب', 'bear', 1.4, { quad: true, fierce: true }], ['ماموث', 'mammoth', 3.4, { quad: true, fierce: true }], ['ديناصور', 'dinosaur', 3.0, { quad: true, fierce: true }],
   ['كلب', 'dog', 0.6, { quad: true }], ['قطة', 'cat', 0.35, { quad: true }], ['جمل', 'camel', 1.9, { quad: true }],
   ['نسر', 'eagle', 0.6, { fly: true }], ['بومة', 'owl', 0.3, { fly: true }], ['طائر', 'bird', 0.25, { fly: true }],
   ['إنسان', 'realistic human', 1.1, {}], ['روبوت', 'robot', 1.1, {}]
@@ -1581,7 +1781,7 @@ async function sfDownload(m, card){
     $('sfBar').style.width = '100%';
     let name = (sfMeta.label || m.name).trim().slice(0, 22), n = 2;
     while (assets.some(a => a.name === name)) name = (sfMeta.label || m.name).trim().slice(0, 20) + ' ' + n++;
-    const rec = { id: 's' + m.uid, name, blob, size: sfMeta.size || 1, fly: !!sfMeta.fly, quad: !!sfMeta.quad,
+    const rec = { id: 's' + m.uid, name, fierce: !!sfMeta.fierce, blob, size: sfMeta.size || 1, fly: !!sfMeta.fly, quad: !!sfMeta.quad,
       credit: `"${m.name}" — ${m.user?.displayName || ''} · ${m.license?.label || 'Sketchfab'}` };
     await idb.put(rec).catch(() => {});
     const a = { ...rec, url: URL.createObjectURL(blob), mine: true }; delete a.blob;
