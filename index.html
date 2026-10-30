@@ -700,7 +700,7 @@ async function addEntity(a){
   const sp = spawnSpot();
   const e = { a, g, yg, m, h, w, sx: sz.x, sz: sz.z, blob, fly: !!a.fly, quad: !!a.quad, yawOff: a.yaw || 0,
     x: sp.x, y: 0, z: sp.z, rotY: -(a.yaw || 0), scale: 1, vx: 0, vy: 0, vz: 0, mode: 'floor',
-    lostT: 0, palmT: 0, pokeCD: 0, waveCD: 1.5, reactT: 0, turning: false, goal: null, spd: 0, fast: false, cmd: false, nodT: 0, thinkT: 0, fight: null, fmove: false, pend: null, ai: null,
+    leanF: 0, leanS: 0, strikeT: 0, lostT: 0, palmT: 0, pokeCD: 0, waveCD: 1.5, reactT: 0, turning: false, goal: null, spd: 0, fast: false, cmd: false, nodT: 0, thinkT: 0, fight: null, fmove: false, pend: null, ai: null,
     tx: 0, tz: 0, wx: 0, wz: 0, pvx: 0, pvz: 0, settle: 0, settleV: 0,
     ride: null, rideOff: null, rideRot: 0, lookYaw: 0, lookPitch: 0, glanceT: 2 + Math.random() * 3, glanceYaw: 0, glancePitch: 0, glanceHold: 0,
     hover: 0.6 + Math.random() * 0.35, bob: Math.random() * 6, home: { x: sp.x, z: sp.z },
@@ -721,8 +721,10 @@ async function addEntity(a){
     e.acts.jump = find(/^jump|walkjump/i);
     e.acts.wave = find(/wave/i);
     e.acts.happy = find(/^yes|thumbs/i);
-    e.acts.attack = find(/punch|attack|bite|strike|claw/i);
-    e.acts.hit = find(/hit|hurt|damage|recoil/i);
+    e.acts.attack = find(/attack|bite|punch|kick|claw|strike|swipe|pounce|slash/i);
+    e.acts.hit = find(/hit|hurt|damage|recoil|react|impact/i);
+    e.acts.roar = find(/roar|growl|howl|scream|threat/i);
+    e.acts.die = find(/death|die|dying|dead|fall/i);
     if (e.fly) e.acts.idle = find(/fly|flap/i) || e.acts.idle || e.mixer.clipAction(gltf.animations[0]);
     if (!e.acts.idle && !e.acts.run) e.acts.idle = e.mixer.clipAction(gltf.animations[0]);
     if (e.fly) e.acts.idle.timeScale = 0.8 + Math.random() * 0.4;
@@ -746,7 +748,7 @@ function setBase(e){
   let want = e.acts.idle;
   if (e.fly) want = e.acts.idle;
   else if (e.mode === 'walk') want = (e.fast ? e.acts.run : e.acts.walk) || e.acts.walk || e.acts.run || e.acts.idle;
-  else if (e.mode === 'fight') want = e.fmove ? ((e.fight?.phase === 'lunge' && e.fight.turn === e ? e.acts.run : e.acts.walk) || e.acts.run || e.acts.idle) : e.acts.idle;
+  else if (e.mode === 'fight') want = (e.fight?.phase === 'move' && e.fight.move?.att === e && e.fight.move.kind !== 'shove') ? (e.acts.run || e.acts.walk || e.acts.idle) : e.fmove ? (e.acts.walk || e.acts.run || e.acts.idle) : e.acts.idle;
   else if (e.mode === 'air' || e.mode === 'grab' || e.mode === 'hop' || e.reactT > 0) want = e.acts.run || e.acts.idle;
   else if (e.turning) want = e.acts.walk || e.acts.idle;
   if (want === e.cur) return;
@@ -880,7 +882,7 @@ function updateEntities(dt, time){
       if (held) {
         if (ok) {
           const q = held.mode === 'grab' ? hand.pinchPt : hand.palm;
-          const dist = clamp(held.holdDist * (held.holdSize / Math.max(hand.size, 1)), 0.7, 9);   /* hand nearer the lens -> object nearer */
+          const dist = clamp(held.holdDist * clamp(held.holdSize / Math.max(hand.size, 1), 0.6, 1.6), 0.5, 5);   /* hand nearer the lens -> object nearer */
           const t = worldAtDist(q.x, q.y, dist);
           t.y -= FLOOR + (held.mode === 'grab' ? held.h * held.scale * 0.85 : (held.fly ? -0.02 : 0));
           t.y = Math.max(0, t.y); held.tgt = t;
@@ -897,9 +899,9 @@ function updateEntities(dt, time){
             held.x += (held.tgt.x - held.x) * k; held.y += (held.tgt.y - held.y) * k; held.z += (held.tgt.z - held.z) * k;
           }
         }
-        (held.vh ||= []).push({ x: (held.x - px) / dt, y: (held.y - py) / dt, z: (held.z - pz) / dt }); if (held.vh.length > 12) held.vh.shift();
+        (held.vh ||= []).push({ x: clamp((held.x - px) / dt, -8, 8), y: clamp((held.y - py) / dt, -8, 8), z: clamp((held.z - pz) / dt, -8, 8) }); if (held.vh.length > 12) held.vh.shift();
         const a = Math.min(1, dt * 12);
-        held.pvx += ((held.x - px) / dt - held.pvx) * a; held.pvz += ((held.z - pz) / dt - held.pvz) * a; held.pvy = ((held.pvy || 0) + ((held.y - py) / dt - (held.pvy || 0)) * a);
+        held.pvx += (clamp((held.x - px) / dt, -8, 8) - held.pvx) * a; held.pvz += (clamp((held.z - pz) / dt, -8, 8) - held.pvz) * a; held.pvy = (held.pvy || 0) + (clamp((held.y - py) / dt, -8, 8) - (held.pvy || 0)) * a;
       }
     }
     if (mountMsgT > 0) { mountMsgT -= dt; tip(mountMsg + '!'); }
@@ -971,7 +973,12 @@ function updateEntities(dt, time){
     if (e.mode === 'grab') { ttz = clamp(-e.pvx * 0.32, -0.8, 0.8); ttx = clamp(e.pvz * 0.32, -0.8, 0.8); }
     else if (e.mode === 'hand') { ttz = clamp((e.pvx) * 0.06, -0.25, 0.25); ttx = clamp(-(e.pvz) * 0.06, -0.25, 0.25); }
     else if (e.mode === 'air') { ttz = clamp(-e.vx * 0.08, -0.3, 0.3); ttx = clamp(e.vz * 0.08, -0.3, 0.3); }
-    const K = e.mode === 'grab' ? 26 : 70, C = e.mode === 'grab' ? 2.6 : 9;
+    else if (e.mode === 'fight') {
+      const fx = Math.sin(e.rotY + e.yawOff), fz = Math.cos(e.rotY + e.yawOff), lf = e.leanF || 0, ls = e.leanS || 0;
+      ttx = lf * fz + ls * fx; ttz = -lf * fx + ls * fz;
+    }
+    const falling = Math.abs(e.leanS || 0) > 1;
+    const K = e.mode === 'grab' ? 26 : falling ? 30 : 70, C = e.mode === 'grab' ? 2.6 : falling ? 9 : 9;
     e.wz += (K * (ttz - e.tz) - C * e.wz) * dt; e.tz += e.wz * dt;
     e.wx += (K * (ttx - e.tx) - C * e.wx) * dt; e.tx += e.wx * dt;
     e.settleV += (-160 * e.settle - 14 * e.settleV) * dt; e.settle = clamp(e.settle + e.settleV * dt * 0.05, -0.12, 0.06);
@@ -1029,54 +1036,88 @@ function arrived(e){
 }
 
 function startFight(a, b){
-  const F = { a, b, phase: 'approach', rounds: 3 + (Math.random() * 3 | 0), turn: Math.random() < 0.5 ? a : b, dir: 1, pt: 0 };
-  for (const e of [a, b]) { e.fight = F; e.mode = 'fight'; e.goal = null; e.vx = e.vz = 0; }
+  const F = { a, b, phase: 'stalk', pt: 0, turn: Math.random() < 0.5 ? a : b, hp: new Map([[a, 100], [b, 100]]), loser: null, move: null };
+  for (const e of [a, b]) { e.fight = F; e.mode = 'fight'; e.goal = null; e.vx = e.vz = 0; e.leanF = 0; e.leanS = 0; playOnce(e, e.acts.roar); }
   fights.push(F);
 }
 function endFight(F, separate = true){
   for (const e of [F.a, F.b]) {
     if (e.fight !== F) continue;
-    e.fight = null; e.fmove = false; if (e.mode === 'fight') e.mode = 'floor';
-    if (e.ai) { e.ai.cd = 10 + Math.random() * 8; e.ai.state = 'look'; e.ai.t = 2; }
+    e.fight = null; e.fmove = false; e.leanF = e.leanS = 0; if (e.mode === 'fight') e.mode = 'floor';
+    if (e.ai) { e.ai.cd = 12 + Math.random() * 8; e.ai.state = 'look'; e.ai.t = 2; }
   }
-  if (separate) for (const [e, o] of [[F.a, F.b], [F.b, F.a]]) {
-    if (!entities.includes(e) || e.mode !== 'floor') continue;
-    const dx = e.x - o.x, dz = e.z - o.z, d = Math.hypot(dx, dz) || 1;
-    walkTo(e, e.x + dx / d * 0.9, e.z + dz / d * 0.9); if (e.ai) e.ai.state = 'wander';
+  if (separate && F.loser && entities.includes(F.loser) && F.loser.mode === 'floor') {
+    const w = F.loser === F.a ? F.b : F.a, e = F.loser, dx = e.x - w.x, dz = e.z - w.z, d = Math.hypot(dx, dz) || 1;
+    walkTo(e, e.x + dx / d * 1.2, e.z + dz / d * 1.2, true);                /* the loser backs off */
   }
   fights.splice(fights.indexOf(F), 1);
 }
+/* a fight is a run of short exchanges in close contact: stalk in, then strike / rear / shove, the other staggers,
+   until one is knocked down, lies there a moment and gets up. Real attack clips play when the model has them. */
 function fightStep(F, dt){
   const { a, b } = F;
   if (!entities.includes(a) || !entities.includes(b) || a.mode !== 'fight' || b.mode !== 'fight') { endFight(F, false); return; }
   const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz) || 1e-3, nx = dx / d, nz = dz / d;
-  const ra = a.w * a.scale * 0.5, rb = b.w * b.scale * 0.5, D0 = (ra + rb) * 1.05 + 0.2;
-  for (const [e, s] of [[a, 1], [b, -1]]) e.rotY += clamp(wrap(Math.atan2(nx * s, nz * s) - e.yawOff - e.rotY), -4.5 * dt, 4.5 * dt);   /* always square up */
-  const step = (e, vx, vz) => { e.x += vx * dt; e.z += vz * dt; e.spd = Math.hypot(vx, vz); };
-  a.fmove = b.fmove = false;
-  if (F.phase === 'approach') {
-    if (d > D0) { const v = Math.min(0.9, (d - D0) * 2); step(a, nx * v, nz * v); step(b, -nx * v, -nz * v); a.fmove = b.fmove = true; }
-    else { F.phase = 'circle'; F.pt = 0.7 + Math.random() * 0.8; F.dir = Math.random() < 0.5 ? 1 : -1; }
-  } else if (F.phase === 'circle') {                 /* size each other up, sidestepping around */
-    F.pt -= dt;
-    const tx = -nz * F.dir, tz = nx * F.dir, v = 0.4, corr = (d - D0) * 1.5;
-    step(a, tx * v + nx * corr * 0.5, tz * v + nz * corr * 0.5); step(b, -tx * v - nx * corr * 0.5, -tz * v - nz * corr * 0.5);
-    a.fmove = b.fmove = true;
-    if (F.pt <= 0) { F.phase = 'lunge'; F.pt = 0.4; const t = F.turn; playOnce(t, t.acts.attack || t.acts.jump); t.vy = t.quad ? 1.7 : 1.0; }
-  } else if (F.phase === 'lunge') {                  /* pounce / strike */
-    const att = F.turn, def = att === a ? b : a, s = att === a ? 1 : -1;
-    F.pt -= dt; step(att, nx * s * 2.8, nz * s * 2.8); att.fmove = true;
-    if (d < (ra + rb) * 0.8 || F.pt <= 0) {
-      def.vx += nx * s * 1.8; def.vz += nz * s * 1.8;
-      def.wz -= nx * s * 8; def.wx += nz * s * 8; def.settleV -= 3; def.reactT = 0.5;
-      if (!playOnce(def, def.acts.hit)) def.nodT = 0.4;
-      att.vx -= nx * s * 0.7; att.vz -= nz * s * 0.7;
-      F.phase = 'recover'; F.pt = 0.5 + Math.random() * 0.4; F.turn = Math.random() < 0.65 ? def : att; F.rounds--;
-    }
-  } else {
-    F.pt -= dt;
-    if (F.pt <= 0) { if (F.rounds <= 0) { endFight(F); return; } F.phase = 'circle'; F.pt = 0.6 + Math.random() * 0.9; if (Math.random() < 0.5) F.dir *= -1; }
+  const ra = a.w * a.scale * 0.5, rb = b.w * b.scale * 0.5, Dc = (ra + rb) * 0.8 + 0.08;
+  const down = F.phase === 'down' || F.phase === 'getup';
+  for (const [e, s] of [[a, 1], [b, -1]]) if (!(down && e === F.loser)) e.rotY += clamp(wrap(Math.atan2(nx * s, nz * s) - e.yawOff - e.rotY), -6 * dt, 6 * dt);
+  const step = (e, v, s) => { e.x += nx * s * v * dt; e.z += nz * s * v * dt; };
+  const side = (e, v) => { e.x += -nz * v * dt; e.z += nx * v * dt; };
+  F.pt -= dt; a.fmove = b.fmove = false;
+  if (F.phase === 'stalk') {                        /* heads low, closing in slowly */
+    a.leanF = b.leanF = 0.12;
+    if (d > Dc * 1.25) { const v = Math.min(0.7, (d - Dc) * 1.5); step(a, v, 1); step(b, v, -1); a.fmove = b.fmove = true; }
+    else { F.phase = 'clash'; F.pt = 0.3 + Math.random() * 0.4; }
+    return;
   }
+  if (F.phase === 'clash') {                        /* in contact: shuffling, pressing, never still */
+    const keep = (d - Dc) * 2.2, jit = Math.sin(performance.now() / 160 + a.bob) * 0.25;
+    step(a, keep, 1); step(b, keep, -1); side(a, jit); side(b, -jit * 0.8);
+    a.leanF = b.leanF = 0.06; a.fmove = b.fmove = Math.abs(jit) > 0.12;
+    if (F.pt <= 0) {
+      const att = F.turn, kinds = att.quad ? ['bite', 'rear', 'shove', 'bite'] : ['strike', 'strike', 'shove'];
+      F.move = { kind: kinds[Math.random() * kinds.length | 0], att, def: att === a ? b : a, s: att === a ? 1 : -1, t: 0, hit: false };
+      if (F.move.kind === 'rear') F.move.dur = 0.75; else F.move.dur = 0.45;
+      if (F.move.kind !== 'shove') playOnce(att, att.acts.attack);
+      F.phase = 'move';
+    }
+    return;
+  }
+  if (F.phase === 'move') {
+    const m = F.move, att = m.att, def = m.def; m.t += dt; const u = m.t / m.dur;
+    if (m.kind === 'rear') {                         /* rise up on hind legs, then come down on the rival */
+      att.leanF = u < 0.55 ? -0.6 * Math.sin(u / 0.55 * Math.PI / 2) : 0.35; if (u >= 0.55) step(att, 1.6, m.s);
+    } else if (m.kind === 'bite' || m.kind === 'strike') {
+      att.leanF = u < 0.35 ? -0.12 : 0.4 * Math.sin(Math.min(1, (u - 0.35) / 0.4) * Math.PI);   /* wind up, then drive in */
+      if (u > 0.35 && u < 0.7) step(att, 2.2, m.s);
+      att.strikeT = 0.2;
+    } else {                                          /* shove: both lean in, one gets driven back */
+      att.leanF = def.leanF = 0.28; step(att, 0.9, m.s); step(def, 0.9, m.s); att.fmove = def.fmove = true;
+    }
+    if (!m.hit && u > (m.kind === 'rear' ? 0.75 : 0.6)) {
+      m.hit = true;
+      const force = m.kind === 'rear' ? 2.2 : m.kind === 'shove' ? 1.0 : 1.5;
+      def.vx += nx * m.s * force; def.vz += nz * m.s * force;
+      def.leanF = -0.35; def.leanS = (Math.random() < 0.5 ? -1 : 1) * 0.25; def.settleV -= 3.5; def.nodT = 0.35;
+      if (!playOnce(def, def.acts.hit)) def.wz += (Math.random() - 0.5) * 6;
+      F.hp.set(def, F.hp.get(def) - (m.kind === 'shove' ? 10 : 18 + Math.random() * 14));
+    }
+    if (u >= 1) {
+      def.leanS = 0;
+      if (F.hp.get(def) <= 0) {
+        F.phase = 'down'; F.pt = 2.2; F.loser = def;
+        def.leanF = 0; def.leanS = (Math.random() < 0.5 ? -1 : 1) * 1.45;   /* knocked onto its side */
+        playOnce(def, def.acts.die); playOnce(att, att.acts.roar || att.acts.happy);
+      } else { F.phase = 'clash'; F.pt = 0.35 + Math.random() * 0.6; F.turn = Math.random() < 0.6 ? def : att; }
+    }
+    return;
+  }
+  if (F.phase === 'down') {
+    const w = F.loser === a ? b : a; w.leanF = 0;
+    if (F.pt <= 0) { F.phase = 'getup'; F.pt = 0.9; F.loser.leanS = 0; }
+    return;
+  }
+  if (F.phase === 'getup' && F.pt <= 0) endFight(F);
 }
 
 /* ---------- hand gestures beyond touch: wave, beckon, point, thumbs up ---------- */
@@ -1160,7 +1201,7 @@ function lookStep(e, dt){
   let T = null;
   const H = e.h * e.scale;
   if (e.mode === 'hand' || e.mode === 'grab' || e.mode === 'hop') T = _o.copy(camPos()).setY(camPos().y - FLOOR);
-  else if (e.fight) { const o = e.fight.a === e ? e.fight.b : e.fight.a; T = _o.set(o.x, o.y + o.h * o.scale * 0.75, o.z); }
+  else if (e.fight) { const o = e.fight.a === e ? e.fight.b : e.fight.a; T = _o.set(o.x, o.y + o.h * o.scale * 0.6, o.z); }   /* go for the neck */
   else if (handsOn && hand && !(e.mode === 'walk' && !e.cmd)) T = worldAtLocal(hand.open ? hand.palm.x : hand.tip.x, hand.open ? hand.palm.y : hand.tip.y, _c.set(e.x, e.y + H * 0.9, e.z));
   else if (e.ai?.focus && entities.includes(e.ai.focus)) { const o = e.ai.focus; T = _o.set(o.x, o.y + o.h * o.scale * 0.8, o.z); }
   else if (e.mode === 'walk' && e.goal) T = _o.set(e.goal.x, H * 0.8, e.goal.z);
@@ -1187,7 +1228,8 @@ function lookStep(e, dt){
   if (!e.head) return;
   const fy = e.rotY + e.yawOff + e.lookYaw;
   _f.set(Math.sin(fy), 0, Math.cos(fy)); _ax.crossVectors(_f, UP).normalize();
-  const nod = e.nodT > 0 ? Math.sin((0.9 - e.nodT) * 14) * 0.26 : 0;
+  if (e.strikeT > 0) e.strikeT -= dt;
+  const nod = (e.nodT > 0 ? Math.sin((0.9 - e.nodT) * 14) * 0.26 : 0) - (e.strikeT > 0 ? 0.35 : 0);
   _qy.setFromAxisAngle(UP, e.lookYaw); _R.setFromAxisAngle(_ax, e.lookPitch + nod).multiply(_qy);
   if (e.neck) { rotateBoneWorld(e.neck, _R, 0.4); rotateBoneWorld(e.head, _R, 0.6); }
   else rotateBoneWorld(e.head, _R, 1);
@@ -1223,17 +1265,39 @@ function estimateLight(dt){
   ground.material.opacity = clamp(0.14 + L.con * 0.5, 0.14, 0.5);
 }
 
+const envC = document.createElement('canvas'); envC.width = 128; envC.height = 64;
+const envX = envC.getContext('2d'); let envT = 0, envRT = null, envGen = null;
+function updateEnv(dt){
+  envT -= dt; if (envT > 0) return;
+  const src = xrH ? (cp ? xrCam.canvas : null) : (video.readyState >= 2 ? video : null);
+  if (!src) return;
+  envT = 1.5;
+  envX.filter = 'blur(3px)'; envX.drawImage(src, 0, 0, 128, 40); envX.filter = 'blur(6px) brightness(.7)';
+  envX.drawImage(src, 0, 0, src.width || src.videoWidth, (src.height || src.videoHeight) * 0.4, 0, 40, 128, 24);   /* floor below: the lower part of the view, darker */
+  const tex = new THREE.CanvasTexture(envC); tex.mapping = THREE.EquirectangularReflectionMapping; tex.colorSpace = THREE.SRGBColorSpace;
+  envGen ||= new THREE.PMREMGenerator(renderer);
+  const xrOn = renderer.xr.enabled; renderer.xr.enabled = false;            /* render the map outside the headset camera */
+  try { const rt = envGen.fromEquirectangular(tex); const old = envRT; envRT = rt; scene.environment = rt.texture; old?.dispose(); }
+  catch {} finally { renderer.xr.enabled = xrOn; tex.dispose(); renderer.state.reset(); }
+}
 function loop(){
   raf = requestAnimationFrame(loop);
   const dt = Math.min(clock.getDelta(), 0.05), time = clock.elapsedTime;
   viewCam = camera;
   if (handsOn) detectHand();
   gyroCamera();
-  estimateLight(dt);
+  estimateLight(dt); updateEnv(dt);
   frameStep(dt, time);
   renderer.render(scene, camera);
 }
 function frameStep(dt, time){
+  dt = Math.max(dt, 1 / 240);
+  for (const e of entities) if (![e.x, e.y, e.z, e.tx, e.tz, e.wx, e.wz, e.vx, e.vy, e.vz, e.pvx, e.pvz, e.rotY].every(Number.isFinite)) {
+    Object.assign(e, { tx: 0, tz: 0, wx: 0, wz: 0, vx: 0, vy: 0, vz: 0, pvx: 0, pvz: 0, pvy: 0, vh: [] });
+    if (!Number.isFinite(e.x) || !Number.isFinite(e.z)) { e.x = e.home?.x || 0; e.z = e.home?.z || 0; }
+    if (!Number.isFinite(e.y)) e.y = 0; if (!Number.isFinite(e.rotY)) e.rotY = 0;
+    if (isHeld(e)) release(e);
+  }
   updateEntities(dt, time);
   drawOcclusion();
   for (const e of entities) {
@@ -1516,7 +1580,7 @@ async function startHandsXR(){
     if (frame && xrH.n++ % 2 === 0) grabCamFrame(frame);
     if (xrH.noCam > 90 && !xrH.warned) { xrH.warned = true; tip('جوالك لا يعطي صورة الكاميرا هنا، فتتبّع اليد متوقف. اللمس يعمل.'); }
     if (handsOn) detectHand();
-    estimateLight(dt);
+    estimateLight(dt); updateEnv(dt);
     frameStep(dt, time);
     renderer.render(scene, camera);
   });
@@ -1716,7 +1780,7 @@ function sfCard(m){
   const img = document.createElement('img'); img.alt = ''; img.loading = 'lazy'; if (imgs[0]) img.src = imgs[0].url;
   const t = document.createElement('b'); t.textContent = m.name;
   const s = document.createElement('small');
-  s.textContent = (m.user?.displayName || '') + (m.animationCount ? ' · متحرّك' : '') + (size ? ' · ' + Math.round(size / 1048576) + ' MB' : '');
+  s.textContent = (m.user?.displayName || '') + (m.animationCount ? ' · ' + m.animationCount + (m.animationCount > 1 ? ' حركات' : ' حركة') : '') + (size ? ' · ' + Math.round(size / 1048576) + ' MB' : '');
   b.append(img, t, s);
   if (assets.some(a => a.id === 's' + m.uid)) { const tg = document.createElement('span'); tg.className = 'tag'; tg.textContent = 'مُضاف'; b.append(tg); }
   b.addEventListener('click', () => sfDownload(m, b));
