@@ -1,0 +1,675 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0d0f12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>خيال</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Reem+Kufi:wght@600;700&display=swap">
+<script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+<style>
+/* Layout: a camera app. Studio screen (preview + asset tray + two actions), full-bleed camera screen, bottom sheets. */
+:root{
+  --bg:#0d0f12; --surface:#171a1f; --line:#2a2f37; --fg:#f2efe9; --muted:#9aa0a8;
+  --accent:#f0b44c; --accent-ink:#1b1408; --danger:#ff6b5e;
+  --display:"Reem Kufi","IBM Plex Sans Arabic",system-ui,sans-serif;
+  --body:"IBM Plex Sans Arabic",system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;
+  --safe-t:env(safe-area-inset-top,0px); --safe-b:env(safe-area-inset-bottom,0px);
+  color-scheme:dark;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;overflow:hidden}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+button:focus-visible,input:focus-visible,label:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
+.screen{position:fixed;inset:0;display:flex;flex-direction:column}
+
+/* Studio */
+#studio{padding:calc(var(--safe-t) + 12px) max(16px,env(safe-area-inset-right,0px)) calc(var(--safe-b) + 16px) max(16px,env(safe-area-inset-left,0px));gap:14px}
+.top{display:flex;align-items:center;justify-content:space-between}
+.brand{font-family:var(--display);font-size:28px;font-weight:700;letter-spacing:0;line-height:1}
+.brand small{display:block;font-family:var(--body);font-size:12px;font-weight:400;color:var(--muted);margin-top:6px}
+.icon-btn{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:var(--surface);border:1px solid var(--line)}
+.stage{position:relative;flex:1;min-height:0;border-radius:22px;overflow:hidden;
+  background:radial-gradient(120% 80% at 50% 100%,#2a2419 0%,#15171b 55%,#0f1114 100%);border:1px solid var(--line)}
+model-viewer{width:100%;height:100%;--poster-color:transparent;background:transparent}
+.stage-label{position:absolute;top:12px;right:14px;font-size:12px;color:var(--muted);background:rgba(0,0,0,.35);padding:4px 10px;border-radius:99px;backdrop-filter:blur(6px)}
+.loading{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:13px;pointer-events:none}
+.tray-head{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--muted)}
+.tray{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
+.tray::-webkit-scrollbar{display:none}
+.chip{flex:none;position:relative;display:flex;align-items:center;gap:6px;height:38px;padding:0 14px;border-radius:99px;background:var(--surface);border:1px solid var(--line);font-size:14px;white-space:nowrap}
+.chip[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.chip.add{border-style:dashed;color:var(--accent);border-color:#5a4a2c}
+.chip .x{margin-inline-start:2px;opacity:.6;font-size:16px;line-height:1}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn{height:54px;border-radius:16px;font-weight:600;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn.primary{background:var(--accent);color:var(--accent-ink)}
+.btn.ghost{background:var(--surface);border:1px solid var(--line)}
+.btn[disabled]{opacity:.45}
+.note{font-size:12px;color:var(--muted);text-align:center;margin:0}
+
+/* Camera */
+#cam{background:#000}
+#video,#gl{position:absolute;inset:0;width:100%;height:100%}
+#video{object-fit:cover}
+#gl{touch-action:none}
+.cam-top{position:absolute;top:calc(var(--safe-t) + 10px);left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:0 max(16px,env(safe-area-inset-right,0px)) 0 max(16px,env(safe-area-inset-left,0px));pointer-events:none}
+.cam-top > *{pointer-events:auto}
+.glass{background:rgba(10,12,15,.55);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.12)}
+.hint{font-size:12px;padding:6px 12px;border-radius:99px;color:#e9e6df}
+.tilt{position:absolute;left:max(14px,env(safe-area-inset-left,0px));top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 8px;border-radius:18px}
+.tilt span{font-size:11px;color:#cfcac0;writing-mode:vertical-rl}
+.tilt input{writing-mode:vertical-lr;direction:rtl;width:28px;height:160px;accent-color:var(--accent)}
+.cam-bottom{position:absolute;left:0;right:0;bottom:0;padding:16px max(16px,env(safe-area-inset-right,0px)) calc(var(--safe-b) + 22px) max(16px,env(safe-area-inset-left,0px));display:grid;grid-template-columns:1fr auto 1fr;align-items:center;background:linear-gradient(transparent,rgba(0,0,0,.55))}
+.shutter{width:76px;height:76px;border-radius:50%;border:4px solid #fff;display:grid;place-items:center}
+.shutter i{width:60px;height:60px;border-radius:50%;background:#fff;transition:transform .12s}
+.shutter:active i{transform:scale(.88)}
+.side{display:flex;gap:10px}
+.side.end{justify-content:flex-start}
+.side.start{justify-content:flex-end}
+.round{width:46px;height:46px;border-radius:50%;display:grid;place-items:center}
+.flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .25s}
+.flash.on{opacity:.8;transition:none}
+.cam-error{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:24px;color:#ddd;font-size:14px;line-height:1.7}
+
+/* Sheets */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;z-index:20}
+.sheet{width:100%;max-height:92%;overflow:auto;background:var(--surface);border-radius:24px 24px 0 0;border-top:1px solid var(--line);padding:18px max(16px,env(safe-area-inset-right,0px)) calc(var(--safe-b) + 18px) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:14px}
+.sheet h2{font-family:var(--display);font-size:22px;margin:0;font-weight:700}
+.sheet p{margin:0;color:var(--muted);font-size:13px;line-height:1.7}
+.shot{width:100%;border-radius:14px;display:block;max-height:58vh;object-fit:contain;background:#000}
+.field{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted)}
+.field input[type=password],.field input[type=text]{height:46px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--fg);padding:0 12px;font:inherit;direction:ltr;text-align:left}
+.pick{height:120px;border:1.5px dashed var(--line);border-radius:14px;display:grid;place-items:center;color:var(--muted);font-size:14px;overflow:hidden;position:relative}
+.pick img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+.bar{height:6px;border-radius:99px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .4s}
+.status{font-size:13px;color:var(--fg);min-height:1.2em}
+.status.err{color:var(--danger)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+#xrUI{position:fixed;inset:0;z-index:30;touch-action:none;background:transparent}
+#xrUI.clean .xr-ctl{opacity:0;pointer-events:none}
+.xr-bottom{position:absolute;left:0;right:0;bottom:calc(var(--safe-b) + 28px);display:flex;justify-content:center;align-items:center;gap:12px;padding:0 16px}
+.xr-bottom .hint{min-width:110px;text-align:center;font-size:14px;padding:10px 16px}
+.toast{position:fixed;left:50%;bottom:calc(var(--safe-b) + 110px);transform:translateX(-50%);padding:10px 16px;border-radius:12px;font-size:13px;z-index:40;max-width:90vw;text-align:center}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<!-- STUDIO -->
+<section id="studio" class="screen">
+  <div class="top">
+    <div class="brand">خيال<small>ضع أي مجسّم في عالمك والتقطه</small></div>
+    <button class="icon-btn" id="openSettings" aria-label="الإعدادات">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </div>
+
+  <div class="stage">
+    <model-viewer id="mv" camera-controls auto-rotate auto-rotate-delay="0" rotation-per-second="18deg"
+      shadow-intensity="1.1" shadow-softness="0.8" environment-image="neutral" exposure="1.05"
+      ar ar-modes="webxr scene-viewer quick-look" ar-placement="floor" ar-scale="auto"
+      interaction-prompt="none" autoplay crossorigin="anonymous">
+      <button slot="ar-button" hidden></button>
+    </model-viewer>
+    <div class="stage-label" id="stageLabel">ثعلب</div>
+    <div class="loading" id="mvLoading">جارٍ تحميل المجسّم…</div>
+  </div>
+
+  <div class="tray-head"><span>المجسّمات</span><span id="trayCount"></span></div>
+  <div class="tray" id="tray" role="list"></div>
+
+  <div class="actions">
+    <button class="btn primary" id="goCam">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+      صوّر بالكاميرا
+    </button>
+    <button class="btn ghost" id="goAR">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg>
+      ضعه في غرفتك
+    </button>
+  </div>
+  <p class="note" id="arNote">«ضعه في غرفتك» يثبّت المجسّم على الأرض الحقيقية. للالتقاط هناك استخدم لقطة الشاشة.</p>
+</section>
+
+<!-- CAMERA -->
+<section id="cam" class="screen" hidden>
+  <video id="video" playsinline muted autoplay></video>
+  <canvas id="gl"></canvas>
+  <div class="flash" id="flash"></div>
+  <div class="cam-error" id="camError" hidden></div>
+
+  <div class="cam-top">
+    <button class="round glass" id="camBack" aria-label="رجوع">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+    </button>
+    <div class="hint glass" id="camHint">اسحب لتحريكه · إصبعان للتكبير والتدوير</div>
+    <button class="round glass" id="camReset" aria-label="إعادة الضبط">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4"/></svg>
+    </button>
+  </div>
+
+  <div class="tilt glass">
+    <span>زاوية الأرض</span>
+    <input type="range" id="tilt" min="8" max="80" value="32" aria-label="زاوية الأرض">
+  </div>
+
+  <div class="cam-bottom">
+    <div class="side start">
+      <button class="round glass" id="camSwitch" aria-label="المجسّم التالي">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/></svg>
+      </button>
+    </div>
+    <button class="shutter" id="shutter" aria-label="التقاط"><i></i></button>
+    <div class="side end">
+      <button class="round glass" id="camShadow" aria-label="الظل" aria-pressed="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="9" r="5"/><ellipse cx="12" cy="19.5" rx="7" ry="1.8" fill="currentColor" opacity=".5" stroke="none"/></svg>
+      </button>
+    </div>
+  </div>
+</section>
+
+<!-- IN-PAGE AR (Android / WebXR) -->
+<div id="xrUI" hidden>
+  <div class="cam-top">
+    <button class="round glass xr-ctl" id="xrClose" aria-label="خروج">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+    <div class="hint glass xr-ctl" id="xrHint">حرّك الجوال ببطء حتى تظهر الدائرة على الأرض</div>
+    <button class="round glass xr-ctl" id="xrHide" aria-label="إخفاء الأزرار للقطة الشاشة">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+    </button>
+  </div>
+  <div class="xr-bottom">
+    <button class="round glass xr-ctl" id="xrPrev" aria-label="المجسّم السابق">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+    </button>
+    <div class="hint glass xr-ctl" id="xrName"></div>
+    <button class="round glass xr-ctl" id="xrNext" aria-label="المجسّم التالي">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- RESULT SHEET -->
+<div class="scrim" id="resultSheet" hidden>
+  <div class="sheet">
+    <h2>اللقطة</h2>
+    <img class="shot" id="shotImg" alt="الصورة الملتقطة">
+    <div class="row">
+      <button class="btn primary" id="saveShot">حفظ / مشاركة</button>
+      <button class="btn ghost" id="againShot">لقطة أخرى</button>
+    </div>
+  </div>
+</div>
+
+<!-- AI SHEET -->
+<div class="scrim" id="aiSheet" hidden>
+  <div class="sheet">
+    <h2>من صورة إلى مجسّم</h2>
+    <p>ارفع صورة لشيء واحد بخلفية بسيطة. يتحول إلى مجسّم ثلاثي الأبعاد عبر Meshy خلال دقيقتين إلى خمس تقريباً، ويُخصم من رصيدك هناك.</p>
+    <label class="pick" id="pickLabel" for="aiFile"><span id="pickText">اختر صورة</span><img id="pickPreview" alt="" hidden></label>
+    <input type="file" id="aiFile" accept="image/*" hidden>
+    <label class="field" for="aiName">اسم المجسّم
+      <input type="text" id="aiName" placeholder="مثلاً: كرسي جدّي" style="direction:rtl;text-align:right">
+    </label>
+    <div class="bar"><i id="aiBar"></i></div>
+    <div class="status" id="aiStatus"></div>
+    <div class="row">
+      <button class="btn primary" id="aiGo" disabled>أنشئ المجسّم</button>
+      <button class="btn ghost" id="aiClose">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS SHEET -->
+<div class="scrim" id="setSheet" hidden>
+  <div class="sheet">
+    <h2>الإعدادات</h2>
+    <label class="field" for="meshyKey">مفتاح Meshy API (لميزة «من صورة»)
+      <input type="password" id="meshyKey" placeholder="msy_…" autocomplete="off">
+    </label>
+    <p>يُحفظ المفتاح في هذا المتصفح فقط ويُرسل مباشرة إلى Meshy. تحصل عليه من صفحة API في حسابك على meshy.ai.</p>
+    <div class="row">
+      <button class="btn primary" id="saveKey">حفظ</button>
+      <button class="btn ghost" id="closeSet">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="glbFile" accept=".glb,.gltf,model/gltf-binary" hidden>
+<div class="toast glass" id="toast" hidden></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+const toastEl = $('toast'); let toastT;
+function toast(msg, ms = 2600){ toastEl.textContent = msg; toastEl.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => toastEl.hidden = true, ms); }
+const store = {
+  get(k, d){ try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+
+/* IndexedDB for user models (uploads + AI results) so they survive reloads */
+const idb = (() => {
+  let dbp;
+  const open = () => dbp ||= new Promise((res, rej) => {
+    const r = indexedDB.open('khayal', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('models', { keyPath: 'id' });
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+  const tx = async (mode, fn) => { const db = await open(); return new Promise((res, rej) => { const t = db.transaction('models', mode); const s = t.objectStore('models'); const out = fn(s); t.oncomplete = () => res(out && out.result); t.onerror = () => rej(t.error); }); };
+  return {
+    all: () => tx('readonly', s => s.getAll()),
+    put: rec => tx('readwrite', s => s.put(rec)),
+    del: id => tx('readwrite', s => s.delete(id))
+  };
+})();
+
+/* ---------- assets ---------- */
+const CDN = 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/';
+const LIBRARY = [
+  { id: 'fox', name: 'ثعلب', url: CDN + 'Fox/glTF-Binary/Fox.glb' },
+  { id: 'chair', name: 'كرسي', url: CDN + 'SheenChair/glTF-Binary/SheenChair.glb' },
+  { id: 'helmet', name: 'خوذة', url: CDN + 'DamagedHelmet/glTF-Binary/DamagedHelmet.glb' },
+  { id: 'lantern', name: 'فانوس', url: CDN + 'Lantern/glTF-Binary/Lantern.glb' },
+  { id: 'boombox', name: 'مسجّل', url: CDN + 'BoomBox/glTF-Binary/BoomBox.glb' },
+  { id: 'car', name: 'سيارة لعبة', url: CDN + 'ToyCar/glTF-Binary/ToyCar.glb' },
+  { id: 'duck', name: 'بطة', url: CDN + 'Duck/glTF-Binary/Duck.glb' },
+  { id: 'avocado', name: 'أفوكادو', url: CDN + 'Avocado/glTF-Binary/Avocado.glb' }
+];
+let assets = [...LIBRARY];
+let current = assets[0];
+
+async function loadUserModels(){
+  try {
+    const recs = await idb.all();
+    for (const r of recs || []) {
+      const url = r.blob ? URL.createObjectURL(r.blob) : r.url;
+      assets.push({ id: r.id, name: r.name, url, mine: true });
+    }
+  } catch {}
+}
+
+function renderTray(){
+  const tray = $('tray'); tray.innerHTML = '';
+  for (const a of assets) {
+    const b = document.createElement('button');
+    b.className = 'chip'; b.setAttribute('role', 'listitem');
+    b.setAttribute('aria-pressed', a === current ? 'true' : 'false');
+    b.textContent = a.name;
+    if (a.mine) {
+      const x = document.createElement('span'); x.className = 'x'; x.textContent = '×'; x.setAttribute('aria-label', 'حذف');
+      x.addEventListener('click', async e => { e.stopPropagation(); await idb.del(a.id).catch(() => {}); assets = assets.filter(o => o !== a); if (current === a) select(assets[0]); else renderTray(); toast('حُذف ' + a.name); });
+      b.append(x);
+    }
+    b.addEventListener('click', () => select(a));
+    tray.append(b);
+  }
+  const up = document.createElement('button'); up.className = 'chip add'; up.textContent = '+ ارفع مجسّم GLB';
+  up.addEventListener('click', () => $('glbFile').click());
+  const ai = document.createElement('button'); ai.className = 'chip add'; ai.textContent = '+ من صورة';
+  ai.addEventListener('click', openAI);
+  tray.append(ai, up);
+  $('trayCount').textContent = assets.length + ' مجسّم';
+}
+
+const mv = $('mv');
+function select(a){
+  current = a; renderTray();
+  $('stageLabel').textContent = a.name;
+  $('mvLoading').hidden = false; $('mvLoading').textContent = 'جارٍ تحميل المجسّم…';
+  mv.src = a.url;
+  store.set('last', a.id);
+  if (camActive || xrMode) loadIntoScene(a);
+  if (xrMode) $('xrName').textContent = a.name;
+}
+mv.addEventListener('load', () => { $('mvLoading').hidden = true; updateARNote(); });
+mv.addEventListener('error', () => { $('mvLoading').textContent = 'تعذّر تحميل هذا المجسّم'; });
+
+function updateARNote(){
+  if (xrSupported) {
+    $('goAR').disabled = false;
+    $('arNote').textContent = '«ضعه في غرفتك» يثبّت المجسّم على أرضك الحقيقية. اضغط على الشاشة لوضعه، وإصبعان للتكبير والتدوير.';
+    return;
+  }
+  const can = mv.canActivateAR;
+  $('goAR').disabled = !can;
+  $('arNote').textContent = can
+    ? '«ضعه في غرفتك» يثبّت المجسّم على الأرض الحقيقية. للالتقاط هناك استخدم لقطة الشاشة.'
+    : 'الوضع الحقيقي للغرفة غير متاح على هذا الجهاز أو المتصفح. «صوّر بالكاميرا» يعمل في كل مكان.';
+  if (can && current.url.startsWith('blob:') && /Android/i.test(navigator.userAgent) && !('xr' in navigator))
+    $('arNote').textContent = 'المجسّمات المرفوعة تعمل في الغرفة عبر Chrome على أندرويد.';
+}
+$('goAR').addEventListener('click', () => {
+  if (xrSupported) { startXR(); return; }
+  try { mv.activateAR(); } catch { toast('تعذّر فتح وضع الغرفة'); }
+});
+
+/* upload GLB */
+$('glbFile').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  if (!/\.(glb|gltf)$/i.test(f.name)) { toast('اختر ملفاً بصيغة GLB'); return; }
+  const id = 'u' + Date.now();
+  const name = f.name.replace(/\.(glb|gltf)$/i, '').slice(0, 24);
+  await idb.put({ id, name, blob: f }).catch(() => {});
+  const a = { id, name, url: URL.createObjectURL(f), mine: true };
+  assets.push(a); select(a); toast('أُضيف ' + name);
+});
+
+/* ---------- camera compositor ---------- */
+let camActive = false, stream = null, renderer, scene, camera, holder, ground, mixer, clock, raf, sun, reticle;
+let xrMode = false, xrSupported = false, hitSource = null;
+const loader = new GLTFLoader(); loader.setCrossOrigin('anonymous');
+const camEl = $('cam'), video = $('video'), gl = $('gl');
+const state = { tilt: 32, scale: 1, rotY: 0, x: 0, z: 0 };
+
+function initThree(){
+  if (renderer) return;
+  renderer = new THREE.WebGLRenderer({ canvas: gl, alpha: true, antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  scene = new THREE.Scene();
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  camera = new THREE.PerspectiveCamera(50, 1, 0.01, 100);
+  scene.add(new THREE.HemisphereLight(0xfff6ea, 0x4a4036, 0.6));
+  sun = new THREE.DirectionalLight(0xffffff, 2.2); scene.add(sun.target);
+  sun.position.set(1.5, 4, 2); sun.castShadow = true;
+  Object.assign(sun.shadow.camera, { left: -3, right: 3, top: 3, bottom: -3, near: 0.1, far: 12 });
+  sun.shadow.mapSize.set(1024, 1024); sun.shadow.radius = 6; sun.shadow.bias = -0.0005;
+  scene.add(sun);
+  ground = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.ShadowMaterial({ opacity: 0.38 }));
+  ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+  holder = new THREE.Group(); scene.add(holder);
+  clock = new THREE.Clock();
+  addEventListener('resize', resize);
+}
+function resize(){
+  if (!renderer) return;
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / h; placeCamera();
+}
+function placeCamera(){
+  const t = THREE.MathUtils.degToRad(state.tilt), D = 3.2;
+  camera.position.set(0, D * Math.sin(t), D * Math.cos(t));
+  camera.lookAt(0, 0.35, 0); camera.updateProjectionMatrix();
+}
+function applyTransform(){ if (!xrMode) holder.position.set(state.x, 0, state.z); holder.scale.setScalar(state.scale); holder.rotation.y = state.rotY; }
+
+let loadToken = 0;
+function loadIntoScene(a){
+  const tok = ++loadToken;
+  $('camHint').textContent = 'جارٍ تحميل ' + a.name + '…';
+  loader.load(a.url, gltf => {
+    if (tok !== loadToken) return;
+    holder.clear(); mixer = null;
+    const m = gltf.scene;
+    m.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
+    const box = new THREE.Box3().setFromObject(m), size = box.getSize(new THREE.Vector3());
+    const k = 1.1 / Math.max(size.x, size.y, size.z, 1e-6);
+    m.scale.setScalar(k);
+    const b2 = new THREE.Box3().setFromObject(m), c = b2.getCenter(new THREE.Vector3());
+    m.position.x -= c.x; m.position.z -= c.z; m.position.y -= b2.min.y;
+    holder.add(m);
+    if (gltf.animations?.length) { mixer = new THREE.AnimationMixer(m); mixer.clipAction(gltf.animations[0]).play(); }
+    $('camHint').textContent = 'اسحب لتحريكه · إصبعان للتكبير والتدوير';
+  }, undefined, () => { if (tok === loadToken) $('camHint').textContent = 'تعذّر تحميل المجسّم'; });
+}
+
+function loop(){
+  raf = requestAnimationFrame(loop);
+  const dt = clock.getDelta(); if (mixer) mixer.update(dt);
+  renderer.render(scene, camera);
+}
+
+async function openCam(){
+  initThree();
+  $('studio').hidden = true; camEl.hidden = false; camActive = true;
+  $('camError').hidden = true;
+  resize(); applyTransform(); loadIntoScene(current);
+  cancelAnimationFrame(raf); loop();
+  try {
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('nomedia');
+    stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+    video.srcObject = stream; await video.play().catch(() => {});
+  } catch (err) {
+    const insecure = !isSecureContext;
+    $('camError').innerHTML = insecure
+      ? 'الكاميرا تحتاج رابطاً آمناً يبدأ بـ https.<br>ارفع التطبيق على استضافة مثل Netlify ثم افتحه من هناك.'
+      : 'لم يُسمح بالوصول إلى الكاميرا.<br>فعّل إذن الكاميرا لهذا الموقع من إعدادات المتصفح ثم أعد المحاولة.';
+    $('camError').hidden = false;
+  }
+}
+function closeCam(){
+  camActive = false; cancelAnimationFrame(raf);
+  stream?.getTracks().forEach(t => t.stop()); stream = null; video.srcObject = null;
+  camEl.hidden = true; $('studio').hidden = false;
+}
+$('goCam').addEventListener('click', openCam);
+$('camBack').addEventListener('click', closeCam);
+$('camReset').addEventListener('click', () => { Object.assign(state, { scale: 1, rotY: 0, x: 0, z: 0, tilt: 32 }); $('tilt').value = 32; placeCamera(); applyTransform(); });
+$('tilt').addEventListener('input', e => { state.tilt = +e.target.value; placeCamera(); });
+$('camSwitch').addEventListener('click', () => { const i = assets.indexOf(current); select(assets[(i + 1) % assets.length]); toast(current.name, 1200); });
+$('camShadow').addEventListener('click', e => { ground.visible = !ground.visible; e.currentTarget.setAttribute('aria-pressed', ground.visible); e.currentTarget.style.opacity = ground.visible ? 1 : .5; });
+
+/* gestures: one finger moves on the floor, two fingers scale + rotate */
+const pts = new Map(); let g0 = null;
+const ray = new THREE.Raycaster(), floor = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit = new THREE.Vector3();
+function floorPoint(x, y){
+  const r = gl.getBoundingClientRect();
+  ray.setFromCamera({ x: ((x - r.left) / r.width) * 2 - 1, y: -((y - r.top) / r.height) * 2 + 1 }, camera);
+  return ray.ray.intersectPlane(floor, hit) ? hit.clone() : null;
+}
+function gestureStart(){
+  const p = [...pts.values()];
+  if (p.length === 1) { const f = floorPoint(p[0].x, p[0].y); g0 = f ? { mode: 1, off: new THREE.Vector3(state.x - f.x, 0, state.z - f.z) } : null; }
+  else if (p.length >= 2) { const [a, b] = p; g0 = { mode: 2, d: Math.hypot(b.x - a.x, b.y - a.y), ang: Math.atan2(b.y - a.y, b.x - a.x), s: state.scale, r: state.rotY }; }
+}
+gl.addEventListener('pointerdown', e => { gl.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); gestureStart(); });
+gl.addEventListener('pointermove', e => {
+  if (!pts.has(e.pointerId)) return;
+  pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (!g0) return;
+  const p = [...pts.values()];
+  if (g0.mode === 1 && p.length === 1) { const f = floorPoint(p[0].x, p[0].y); if (f) { state.x = THREE.MathUtils.clamp(f.x + g0.off.x, -6, 6); state.z = THREE.MathUtils.clamp(f.z + g0.off.z, -8, 2.4); } }
+  if (g0.mode === 2 && p.length >= 2) { const [a, b] = p; state.scale = THREE.MathUtils.clamp(g0.s * Math.hypot(b.x - a.x, b.y - a.y) / g0.d, 0.1, 12); state.rotY = g0.r - (Math.atan2(b.y - a.y, b.x - a.x) - g0.ang); }
+  applyTransform();
+});
+const end = e => { pts.delete(e.pointerId); gestureStart(); };
+gl.addEventListener('pointerup', end); gl.addEventListener('pointercancel', end);
+gl.addEventListener('wheel', e => { e.preventDefault(); state.scale = THREE.MathUtils.clamp(state.scale * (e.deltaY < 0 ? 1.08 : 0.93), 0.1, 12); applyTransform(); }, { passive: false });
+
+/* ---------- in-page AR with real floor tracking (Chrome on Android) ---------- */
+const xrUI = $('xrUI'); let xrSession = null, lastTwoFinger = 0;
+async function startXR(){
+  initThree();
+  if (!reticle) {
+    reticle = new THREE.Mesh(new THREE.RingGeometry(0.07, 0.095, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xf0b44c }));
+    reticle.matrixAutoUpdate = false; reticle.visible = false; scene.add(reticle);
+  }
+  try {
+    xrSession = await navigator.xr.requestSession('immersive-ar', {
+      requiredFeatures: ['hit-test'], optionalFeatures: ['dom-overlay'], domOverlay: { root: xrUI }
+    });
+  } catch (e) { toast('تعذّر تشغيل الواقع المعزز. تأكد أن «خدمات Google Play للواقع المعزز» مثبّتة.', 4200); return; }
+  xrMode = true;
+  renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType('local');
+  await renderer.xr.setSession(xrSession);
+  hitSource = await xrSession.requestHitTestSource({ space: await xrSession.requestReferenceSpace('viewer') });
+  Object.assign(state, { scale: 0.6, rotY: 0 }); applyTransform();
+  holder.visible = false; ground.visible = false;
+  xrUI.hidden = false; xrUI.classList.remove('clean'); $('studio').hidden = true;
+  $('xrHint').textContent = 'حرّك الجوال ببطء حتى تظهر الدائرة على الأرض';
+  $('xrName').textContent = current.name;
+  loadIntoScene(current);
+  xrSession.addEventListener('select', placeAtReticle);
+  xrSession.addEventListener('end', endXR);
+  renderer.setAnimationLoop((t, frame) => {
+    if (frame && hitSource) {
+      const hits = frame.getHitTestResults(hitSource);
+      if (hits.length) {
+        reticle.matrix.fromArray(hits[0].getPose(renderer.xr.getReferenceSpace()).transform.matrix);
+        if (!reticle.visible && !holder.visible) $('xrHint').textContent = 'اضغط على الشاشة لوضع المجسّم هنا';
+        reticle.visible = true;
+      } else reticle.visible = false;
+    }
+    if (mixer) mixer.update(clock.getDelta()); else clock.getDelta();
+    renderer.render(scene, camera);
+  });
+}
+function placeAtReticle(){
+  if (!reticle.visible || pts.size > 1 || Date.now() - lastTwoFinger < 400) return;
+  const p = new THREE.Vector3().setFromMatrixPosition(reticle.matrix);
+  holder.position.copy(p); ground.position.copy(p);
+  sun.position.set(p.x + 1.5, p.y + 4, p.z + 2); sun.target.position.copy(p);
+  holder.visible = true; ground.visible = true;
+  $('xrHint').textContent = 'اضغط لنقله · إصبعان للتكبير والتدوير';
+}
+function endXR(){
+  renderer.setAnimationLoop(null); renderer.xr.enabled = false;
+  hitSource = null; xrSession = null; xrMode = false;
+  reticle.visible = false; holder.visible = true; ground.visible = true; ground.position.set(0, 0, 0);
+  sun.position.set(1.5, 4, 2); sun.target.position.set(0, 0, 0);
+  Object.assign(state, { scale: 1, rotY: 0, x: 0, z: 0 }); applyTransform();
+  xrUI.hidden = true; $('studio').hidden = false;
+}
+$('xrClose').addEventListener('click', () => xrSession?.end());
+$('xrNext').addEventListener('click', () => { const i = assets.indexOf(current); select(assets[(i - 1 + assets.length) % assets.length]); });
+$('xrPrev').addEventListener('click', () => { const i = assets.indexOf(current); select(assets[(i + 1) % assets.length]); });
+$('xrHide').addEventListener('click', () => {
+  xrUI.classList.add('clean'); reticle.material.visible = false;
+  toast('خذ لقطة شاشة الآن (زر التشغيل + خفض الصوت)', 2400);
+  setTimeout(() => { xrUI.classList.remove('clean'); reticle.material.visible = true; }, 6000);
+});
+for (const id of ['xrClose', 'xrNext', 'xrPrev', 'xrHide']) $(id).addEventListener('beforexrselect', e => e.preventDefault());
+/* two-finger scale/rotate on the overlay */
+const xpts = new Map(); let x0 = null;
+xrUI.addEventListener('pointerdown', e => { xpts.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (xpts.size === 2) { const [a, b] = [...xpts.values()]; x0 = { d: Math.hypot(b.x - a.x, b.y - a.y), ang: Math.atan2(b.y - a.y, b.x - a.x), s: state.scale, r: state.rotY }; lastTwoFinger = Date.now(); } });
+xrUI.addEventListener('pointermove', e => {
+  if (!xpts.has(e.pointerId)) return; xpts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (xpts.size >= 2 && x0) { const [a, b] = [...xpts.values()]; state.scale = THREE.MathUtils.clamp(x0.s * Math.hypot(b.x - a.x, b.y - a.y) / x0.d, 0.05, 8); state.rotY = x0.r - (Math.atan2(b.y - a.y, b.x - a.x) - x0.ang); applyTransform(); lastTwoFinger = Date.now(); }
+});
+const xend = e => { xpts.delete(e.pointerId); if (xpts.size < 2) x0 = null; };
+xrUI.addEventListener('pointerup', xend); xrUI.addEventListener('pointercancel', xend);
+
+/* capture: camera frame (cover-cropped) + 3D layer */
+let lastBlob = null, lastURL = null;
+$('shutter').addEventListener('click', async () => {
+  renderer.render(scene, camera);
+  const W = gl.width, H = gl.height, out = document.createElement('canvas');
+  out.width = W; out.height = H; const c = out.getContext('2d');
+  if (video.videoWidth) {
+    const vw = video.videoWidth, vh = video.videoHeight, s = Math.max(W / vw, H / vh);
+    c.drawImage(video, (W - vw * s) / 2, (H - vh * s) / 2, vw * s, vh * s);
+  } else { c.fillStyle = '#222'; c.fillRect(0, 0, W, H); }
+  c.drawImage(gl, 0, 0, W, H);
+  const fl = $('flash'); fl.classList.add('on'); requestAnimationFrame(() => requestAnimationFrame(() => fl.classList.remove('on')));
+  out.toBlob(b => {
+    lastBlob = b; if (lastURL) URL.revokeObjectURL(lastURL); lastURL = URL.createObjectURL(b);
+    $('shotImg').src = lastURL; $('resultSheet').hidden = false;
+  }, 'image/jpeg', 0.92);
+});
+$('againShot').addEventListener('click', () => $('resultSheet').hidden = true);
+$('saveShot').addEventListener('click', async () => {
+  if (!lastBlob) return;
+  const name = 'khayal-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.jpg';
+  const file = new File([lastBlob], name, { type: 'image/jpeg' });
+  try {
+    if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], title: 'خيال' }); return; }
+  } catch (e) { if (e.name === 'AbortError') return; }
+  const a = document.createElement('a'); a.href = lastURL; a.download = name; document.body.append(a); a.click(); a.remove();
+  toast('حُفظت الصورة');
+});
+
+/* ---------- settings ---------- */
+$('openSettings').addEventListener('click', () => { $('meshyKey').value = store.get('meshyKey', ''); $('setSheet').hidden = false; });
+$('closeSet').addEventListener('click', () => $('setSheet').hidden = true);
+$('saveKey').addEventListener('click', () => { store.set('meshyKey', $('meshyKey').value.trim()); $('setSheet').hidden = true; toast('حُفظ المفتاح'); });
+
+/* ---------- image → 3D via Meshy ---------- */
+let aiImage = null, aiBusy = false;
+function openAI(){
+  if (!store.get('meshyKey', '')) { $('setSheet').hidden = false; $('meshyKey').value = ''; toast('أضف مفتاح Meshy أولاً', 3200); return; }
+  $('aiSheet').hidden = false;
+}
+$('aiClose').addEventListener('click', () => { $('aiSheet').hidden = true; });
+$('aiFile').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  aiImage = await shrink(f, 1024);
+  $('pickPreview').src = aiImage; $('pickPreview').hidden = false; $('pickText').hidden = true;
+  if (!$('aiName').value) $('aiName').value = 'مجسّمي';
+  $('aiGo').disabled = aiBusy;
+});
+function shrink(file, max){
+  return new Promise((res, rej) => {
+    const img = new Image(); img.onload = () => {
+      const s = Math.min(1, max / Math.max(img.width, img.height));
+      const cv = document.createElement('canvas'); cv.width = Math.round(img.width * s); cv.height = Math.round(img.height * s);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      URL.revokeObjectURL(img.src);
+      res(cv.toDataURL(file.type === 'image/png' ? 'image/png' : 'image/jpeg', 0.9));
+    }; img.onerror = rej; img.src = URL.createObjectURL(file);
+  });
+}
+const aiStatus = (t, err) => { const s = $('aiStatus'); s.textContent = t; s.classList.toggle('err', !!err); };
+const API = 'https://api.meshy.ai/openapi/v1/image-to-3d';
+$('aiGo').addEventListener('click', async () => {
+  if (!aiImage || aiBusy) return;
+  const key = store.get('meshyKey', ''), name = ($('aiName').value || 'مجسّمي').slice(0, 24);
+  aiBusy = true; $('aiGo').disabled = true; $('aiBar').style.width = '3%'; aiStatus('جارٍ الإرسال…');
+  const H = { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' };
+  try {
+    const r = await fetch(API, { method: 'POST', headers: H, body: JSON.stringify({ image_url: aiImage, should_texture: true, enable_pbr: true }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(r.status === 401 ? 'المفتاح غير صحيح. راجعه من الإعدادات.' : r.status === 402 ? 'رصيدك في Meshy لا يكفي.' : (j.message || 'رفض Meshy الطلب (' + r.status + ')'));
+    const id = j.result;
+    let task;
+    for (;;) {
+      await new Promise(r => setTimeout(r, 5000));
+      const q = await fetch(API + '/' + id, { headers: H }); task = await q.json();
+      const p = task.progress || 0; $('aiBar').style.width = Math.max(5, p) + '%';
+      if (task.status === 'SUCCEEDED') break;
+      if (task.status === 'FAILED' || task.status === 'CANCELED') throw new Error(task.task_error?.message || 'فشل إنشاء المجسّم. جرّب صورة أوضح بخلفية بسيطة.');
+      aiStatus('يتشكّل المجسّم… ' + p + '%');
+    }
+    const glbURL = task.model_urls?.glb; if (!glbURL) throw new Error('لم يرجع Meshy ملف GLB.');
+    aiStatus('جارٍ الحفظ…');
+    const recId = 'm' + Date.now(); let url = glbURL;
+    try { const blob = await (await fetch(glbURL)).blob(); await idb.put({ id: recId, name, blob }); url = URL.createObjectURL(blob); }
+    catch { await idb.put({ id: recId, name, url: glbURL }).catch(() => {}); }
+    const a = { id: recId, name, url, mine: true }; assets.push(a); select(a);
+    $('aiBar').style.width = '100%'; aiStatus('جاهز! أُضيف «' + name + '» إلى مجسّماتك.');
+  } catch (err) {
+    const blocked = err instanceof TypeError;
+    aiStatus(blocked ? 'تعذّر الاتصال بـ Meshy من المتصفح. تحقق من الإنترنت، وإن استمر فالخدمة تمنع الاتصال المباشر وتحتاج وسيطاً بسيطاً.' : err.message, true);
+    $('aiBar').style.width = '0';
+  } finally { aiBusy = false; $('aiGo').disabled = !aiImage; }
+});
+
+/* ---------- boot ---------- */
+await loadUserModels();
+const last = store.get('last', null);
+current = assets.find(a => a.id === last) || assets[0];
+select(current);
+try { xrSupported = !!(await navigator.xr?.isSessionSupported('immersive-ar')); } catch {}
+updateARNote();
+customElements.whenDefined('model-viewer').then(updateARNote);
+</script>
+</body>
+</html>
