@@ -107,6 +107,11 @@ model-viewer{width:100%;height:100%;--poster-color:transparent;background:transp
 .cam-tray .chip{height:34px;font-size:13px;background:rgba(10,12,15,.55);border-color:rgba(255,255,255,.14);color:#f2efe9;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
 .cam-top .hint{max-width:calc(100% - 120px);text-align:center}
 .face-btn{position:absolute;top:10px;left:12px;font-size:12px;padding:6px 12px;border-radius:99px;background:rgba(0,0,0,.4);border:1px solid var(--line);backdrop-filter:blur(6px)}
+.ent-del{position:absolute;left:0;top:0;transform:translate(-50%,-130%);font-size:13px;font-weight:600;padding:7px 14px;border-radius:99px;background:rgba(255,107,94,.92);color:#fff;z-index:5}
+.chip.edit{color:var(--muted)}
+.chip.edit.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.chip.del{border-color:rgba(255,107,94,.55);color:#ffb3ab}
+.sheet > *{flex-shrink:0}
 .credit{position:absolute;left:12px;right:12px;bottom:10px;font-size:11px;color:var(--muted);direction:ltr;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sheet.sf{max-height:94%}
 .sf-head{display:flex;justify-content:space-between;align-items:center}
@@ -116,6 +121,12 @@ model-viewer{width:100%;height:100%;--poster-color:transparent;background:transp
 .sf-toggle{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
 .sf-toggle input{accent-color:var(--accent);width:18px;height:18px}
 .status a{color:var(--accent)}
+.sf-panel{position:sticky;bottom:calc(-18px - var(--safe-b));margin:0 -16px calc(-18px - var(--safe-b));padding:14px 16px calc(var(--safe-b) + 16px);background:var(--surface);border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px;box-shadow:0 -10px 24px rgba(0,0,0,.4)}
+.sf-token{display:flex;flex-direction:column;gap:10px}
+.sf-token a,.sf-panel a{color:var(--accent)}
+.sf-card{position:relative}
+.sf-card.busy{outline:2px solid var(--accent)}
+.sf-card .tag{position:absolute;top:8px;right:8px;font-size:11px;font-weight:600;padding:3px 8px;border-radius:99px;background:var(--accent);color:var(--accent-ink)}
 .sf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .sf-card{display:flex;flex-direction:column;gap:4px;text-align:right;background:var(--bg);border:1px solid var(--line);border-radius:14px;overflow:hidden;padding-bottom:10px;min-width:0}
 .sf-card img{width:100%;aspect-ratio:4/3;object-fit:cover;background:#22262c;display:block}
@@ -181,6 +192,7 @@ model-viewer{width:100%;height:100%;--poster-color:transparent;background:transp
   <div id="grain"></div>
   <canvas id="hands"></canvas>
   <div class="flash" id="flash"></div>
+  <button class="ent-del" id="entDel" type="button" hidden>احذف ×</button>
   <div class="hand-tip glass" id="handTip" hidden>أدخل يدك أمام الكاميرا</div>
   <div class="cam-error" id="camError" hidden></div>
 
@@ -281,10 +293,20 @@ model-viewer{width:100%;height:100%;--poster-color:transparent;background:transp
     </form>
     <div class="tray" id="sfCats"></div>
     <label class="sf-toggle" for="sfAnim"><input type="checkbox" id="sfAnim" checked> متحرّكة فقط</label>
-    <div class="status" id="sfStatus"></div>
-    <div class="bar" id="sfBarWrap" hidden><i id="sfBar"></i></div>
+    <div class="status" id="sfInfo"></div>
     <div class="sf-grid" id="sfGrid"></div>
     <p>المجسّمات من مجتمع Sketchfab، وأغلبها بترخيص يطلب ذكر صاحبها، فاسمه يظهر تحت المجسّم.</p>
+    <div class="sf-panel" id="sfPanel" hidden>
+      <div class="status" id="sfStatus"></div>
+      <div class="bar" id="sfBarWrap" hidden><i id="sfBar"></i></div>
+      <div class="sf-token" id="sfTokenRow" hidden>
+        <p>مرة واحدة فقط: Sketchfab يطلب حساباً مجانياً للتنزيل. <a href="https://sketchfab.com/settings/password" target="_blank" rel="noopener">افتح صفحة المفتاح</a>، سجّل الدخول أو أنشئ حساباً، وانسخ <b>API Token</b> من أسفل الصفحة والصقه هنا.</p>
+        <div class="sf-search">
+          <input type="text" id="sfTokenIn" dir="ltr" placeholder="الصق المفتاح هنا" autocomplete="off" aria-label="مفتاح Sketchfab">
+          <button class="btn primary" id="sfTokenGo" type="button">حفظ وأضف</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -354,7 +376,7 @@ const LIBRARY = [
   { id: 'chair', name: 'كرسي', url: CDN + 'SheenChair/glTF-Binary/SheenChair.glb', size: 0.9, back: 0.5 },
   { id: 'lantern', name: 'فانوس', url: CDN + 'Lantern/glTF-Binary/Lantern.glb', size: 0.6 }
 ];
-let assets = [...LIBRARY];
+let assets = LIBRARY.filter(a => !store.get('hidden', []).includes(a.id));
 const savedYaw = a => { const v = store.get('yaw:' + a.id, null); if (v !== null) a.yaw = v; return a; };
 assets.forEach(savedYaw);
 let current = assets[0];
@@ -369,30 +391,42 @@ async function loadUserModels(){
   } catch {}
 }
 
+let editMode = false;
 function renderTray(){
   const tray = $('tray'); tray.innerHTML = '';
+  const ed = document.createElement('button'); ed.className = 'chip edit' + (editMode ? ' on' : '');
+  ed.textContent = editMode ? 'تم' : 'تعديل';
+  ed.addEventListener('click', () => { editMode = !editMode; renderTray(); });
+  tray.append(ed);
   for (const a of assets) {
     const b = document.createElement('button');
-    b.className = 'chip'; b.setAttribute('role', 'listitem');
-    b.setAttribute('aria-pressed', a === current ? 'true' : 'false');
-    b.textContent = a.name;
-    if (a.mine) {
-      const x = document.createElement('span'); x.className = 'x'; x.textContent = '×'; x.setAttribute('aria-label', 'حذف');
-      x.addEventListener('click', async e => { e.stopPropagation(); await idb.del(a.id).catch(() => {}); assets = assets.filter(o => o !== a); if (current === a) select(assets[0]); else renderTray(); toast('حُذف ' + a.name); });
-      b.append(x);
-    }
-    b.addEventListener('click', () => select(a));
+    b.className = 'chip' + (editMode ? ' del' : ''); b.setAttribute('role', 'listitem');
+    b.setAttribute('aria-pressed', !editMode && a === current ? 'true' : 'false');
+    b.textContent = editMode ? a.name + '  ×' : a.name;
+    if (editMode) b.setAttribute('aria-label', 'احذف ' + a.name);
+    b.addEventListener('click', () => editMode ? deleteAsset(a) : select(a));
     tray.append(b);
   }
-  const up = document.createElement('button'); up.className = 'chip add'; up.textContent = '+ ارفع مجسّم GLB';
-  up.textContent = '+ ارفع مجسّم';
-  up.addEventListener('click', () => $('glbFile').click());
-  const ai = document.createElement('button'); ai.className = 'chip add'; ai.textContent = '+ من صورة';
-  ai.addEventListener('click', openAI);
-  const sf = document.createElement('button'); sf.className = 'chip add'; sf.textContent = '+ مجسّمات واقعية';
-  sf.addEventListener('click', openSF);
-  tray.append(sf, ai, up);
-  $('trayCount').textContent = assets.length + ' مجسّم';
+  if (!editMode) {
+    const sf = document.createElement('button'); sf.className = 'chip add'; sf.textContent = '+ مجسّمات واقعية';
+    sf.addEventListener('click', openSF);
+    const ai = document.createElement('button'); ai.className = 'chip add'; ai.textContent = '+ من صورة';
+    ai.addEventListener('click', openAI);
+    const up = document.createElement('button'); up.className = 'chip add'; up.textContent = '+ ارفع مجسّم';
+    up.addEventListener('click', () => $('glbFile').click());
+    tray.append(sf, ai, up);
+  }
+  $('trayCount').textContent = editMode ? 'اضغط مجسّماً لحذفه' : assets.length + ' مجسّم';
+  if (camActive) renderCamTray();
+}
+async function deleteAsset(a){
+  if (assets.length <= 1) { toast('أبقِ مجسّماً واحداً على الأقل'); return; }
+  if (a.mine) await idb.del(a.id).catch(() => {});
+  else store.set('hidden', [...new Set([...store.get('hidden', []), a.id])]);
+  assets = assets.filter(o => o !== a);
+  for (const e of [...entities]) if (e.a === a) removeEntity(e);
+  if (current === a) select(assets[0]); else renderTray();
+  toast('حُذف ' + a.name, 1400);
 }
 
 const mv = $('mv');
@@ -715,7 +749,7 @@ function entityAt(q, pad = 0, filter){
   return best;
 }
 
-let handSeenT = 0, callT = 0, tipText = '';
+let handSeenT = 0, callT = 0, tipText = '', entDelT = 0;
 function tip(t){ if (t !== tipText) { tipText = t; $('handTip').innerHTML = t; } }
 const isHeld = e => e.mode === 'hand' || e.mode === 'grab' || e.mode === 'hop';
 function updateEntities(dt, time){
@@ -941,7 +975,13 @@ function loop(){
   }
   entGroup.updateMatrixWorld(true);
   for (const e of entities) lookStep(e, dt);
-  if (selected && entities.length > 1 && !isHeld(selected) && !handsOn) {
+  const del = $('entDel');
+  if (entDelT > 0 && selected && entities.includes(selected) && !isHeld(selected)) {
+    entDelT -= dt;
+    _v.set(selected.x, selected.y + selected.h * selected.scale, selected.z).project(camera);
+    del.style.left = ((_v.x + 1) / 2 * innerWidth) + 'px'; del.style.top = ((1 - _v.y) / 2 * innerHeight) + 'px'; del.hidden = false;
+  } else del.hidden = true;
+  if (selected && !isHeld(selected) && (entDelT > 0 || (entities.length > 1 && !handsOn))) {
     selRing.visible = true; selRing.position.set(selected.x, (selected.mode === 'ride' ? selected.y : 0) + 0.004, selected.z);
     selRing.scale.setScalar(Math.max(0.3, selected.w * selected.scale * 0.6 / 0.47));
   } else selRing.visible = false;
@@ -992,7 +1032,9 @@ $('camReset').addEventListener('click', () => {
   state.tilt = 32; $('tilt').value = 32; placeCamera(); addEntity(current);
 });
 $('tilt').addEventListener('input', e => { state.tilt = +e.target.value; placeCamera(); });
-$('camDelete').addEventListener('click', () => { if (selected) { const n = selected.a.name; removeEntity(selected); toast('حُذف ' + n, 1400); } });
+const delSelected = () => { if (!selected) { toast('اضغط على مجسّم في المشهد أولاً', 1600); return; } const n = selected.a.name; removeEntity(selected); entDelT = 0; toast('حُذف ' + n + ' من المشهد', 1400); };
+$('camDelete').addEventListener('click', delSelected);
+$('entDel').addEventListener('click', delSelected);
 $('camShadow').addEventListener('click', e => { ground.visible = !ground.visible; e.currentTarget.setAttribute('aria-pressed', ground.visible); e.currentTarget.style.opacity = ground.visible ? 1 : .5; });
 
 /* touch: tap to pick, one finger drags on the floor, two fingers scale + rotate */
@@ -1001,7 +1043,7 @@ function gestureStart(){
   const p = [...pts.values()]; g0 = null;
   if (p.length === 1) {
     const e = entityAt(p[0]); if (!e) return;
-    selected = e;
+    selected = e; entDelT = 3.5;
     if (e.mode === 'ride') { e.mode = 'floor'; e.ride = null; e.y = 0; }
     if (e.mode !== 'floor') return;
     const f = floorPoint(p[0].x, p[0].y); if (f) g0 = { mode: 1, e, off: new THREE.Vector3(e.x - f.x, 0, e.z - f.z) };
@@ -1221,7 +1263,9 @@ const CATS = [
   ['إنسان', 'realistic human', 1.1, {}], ['روبوت', 'robot', 1.1, {}]
 ];
 let sfMeta = { label: '', size: 1 }, sfBusy = false;
-const sfStatus = (html, err) => { const s = $('sfStatus'); s.innerHTML = html; s.classList.toggle('err', !!err); };
+const sfInfo = t => { $('sfInfo').textContent = t; };
+const sfStatus = (html, err) => { $('sfPanel').hidden = false; const s = $('sfStatus'); s.innerHTML = html; s.classList.toggle('err', !!err); };
+let sfPending = null;
 function openSF(){
   $('sfSheet').hidden = false;
   if (!$('sfGrid').children.length) runCat(CATS[0]);
@@ -1239,16 +1283,16 @@ function runCat(c){
 }
 async function sfSearch(q){
   if (!q.trim()) return;
-  sfStatus('جارٍ البحث…'); $('sfGrid').innerHTML = '';
+  sfInfo('جارٍ البحث…'); $('sfGrid').innerHTML = '';
   const u = new URL('https://api.sketchfab.com/v3/search');
   u.search = new URLSearchParams({ type: 'models', q, downloadable: 'true', sort_by: '-likeCount', count: '24', ...($('sfAnim').checked ? { animated: 'true' } : {}) });
   try {
     const r = await fetch(u); if (!r.ok) throw new Error(r.status);
     const res = ((await r.json()).results || []).filter(m => !m.faceCount || m.faceCount < 400000);
-    if (!res.length) { sfStatus('لا نتائج. جرّب كلمة إنجليزية أخرى، أو ألغِ «متحرّكة فقط».'); return; }
-    sfStatus('اختر مجسّماً ليُضاف إلى مجسّماتك. الأعلى إعجاباً أولاً.');
+    if (!res.length) { sfInfo('لا نتائج. جرّب كلمة إنجليزية أخرى، أو ألغِ «متحرّكة فقط».'); return; }
+    sfInfo('اضغط على أي مجسّم فيُضاف مباشرة إلى مجسّماتك. الأعلى إعجاباً أولاً.');
     for (const m of res) $('sfGrid').append(sfCard(m));
-  } catch { sfStatus('تعذّر البحث في Sketchfab. تحقق من الإنترنت.', true); }
+  } catch { sfInfo('تعذّر البحث في Sketchfab. تحقق من الإنترنت.'); }
 }
 function sfCard(m){
   const imgs = (m.thumbnails?.images || []).slice().sort((a, b) => Math.abs(a.width - 360) - Math.abs(b.width - 360));
@@ -1259,7 +1303,8 @@ function sfCard(m){
   const s = document.createElement('small');
   s.textContent = (m.user?.displayName || '') + (m.animationCount ? ' · متحرّك' : '') + (size ? ' · ' + Math.round(size / 1048576) + ' MB' : '');
   b.append(img, t, s);
-  b.addEventListener('click', () => sfDownload(m));
+  if (assets.some(a => a.id === 's' + m.uid)) { const tg = document.createElement('span'); tg.className = 'tag'; tg.textContent = 'مُضاف'; b.append(tg); }
+  b.addEventListener('click', () => sfDownload(m, b));
   return b;
 }
 async function fetchWithProgress(url, onP){
@@ -1294,19 +1339,24 @@ async function zipToGlb(buf){
   Object.values(urls).forEach(u => URL.revokeObjectURL(u));
   return new Blob([out], { type: 'model/gltf-binary' });
 }
-async function sfDownload(m){
+async function sfDownload(m, card){
   if (sfBusy) return;
   const page = `https://sketchfab.com/3d-models/${m.uid}`;
   const manual = `<br><a href="${page}" target="_blank" rel="noopener">افتحه في Sketchfab</a>، نزّله بصيغة GLB أو glTF، ثم ارفعه من «+ ارفع مجسّم».`;
+  if (assets.some(a => a.id === 's' + m.uid)) { sfStatus('«' + m.name + '» موجود في مجسّماتك.'); return; }
   const token = store.get('sfToken', '');
-  if (!token) { sfStatus('للتنزيل المباشر أضف مفتاح Sketchfab المجاني من الإعدادات.' + manual); return; }
+  sfPending = { m, card };
+  if (!token) { sfStatus('خطوة أخيرة قبل إضافة «' + m.name + '»:'); $('sfTokenRow').hidden = false; $('sfTokenIn').focus(); return; }
+  $('sfTokenRow').hidden = true;
+  document.querySelectorAll('.sf-card.busy').forEach(c => c.classList.remove('busy')); card?.classList.add('busy');
   sfBusy = true; $('sfBarWrap').hidden = false; $('sfBar').style.width = '2%';
   sfStatus('جارٍ تجهيز «' + m.name + '»…');
   try {
     const api = `https://api.sketchfab.com/v3/models/${m.uid}/download`;
     let r = await fetch(api, { headers: { Authorization: 'Token ' + token } });
     if (r.status === 401 || r.status === 403) r = await fetch(api, { headers: { Authorization: 'Bearer ' + token } });
-    if (!r.ok) throw new Error(r.status === 401 ? 'المفتاح غير صحيح. راجعه في الإعدادات.' : r.status === 429 ? 'وصلت حد التنزيل اليومي في Sketchfab. جرّب لاحقاً.' : r.status === 403 ? 'صاحب هذا المجسّم لا يسمح بتنزيله عبر التطبيقات.' : 'رفض Sketchfab الطلب (' + r.status + ').');
+    if (r.status === 401) { store.set('sfToken', ''); $('sfTokenRow').hidden = false; throw new Error('المفتاح غير صحيح. انسخه مرة أخرى من صفحة المفتاح.'); }
+    if (!r.ok) throw new Error(r.status === 401 ? 'المفتاح غير صحيح.' : r.status === 429 ? 'وصلت حد التنزيل اليومي في Sketchfab. جرّب لاحقاً.' : r.status === 403 ? 'صاحب هذا المجسّم لا يسمح بتنزيله عبر التطبيقات.' : 'رفض Sketchfab الطلب (' + r.status + ').');
     const j = await r.json(), arc = j.glb || j.gltf;
     if (!arc?.url) throw new Error('لا يوجد ملف قابل للتنزيل لهذا المجسّم.');
     sfStatus('جارٍ التنزيل…');
@@ -1314,21 +1364,28 @@ async function sfDownload(m){
     sfStatus('جارٍ التحويل…');
     const blob = j.glb ? new Blob([buf], { type: 'model/gltf-binary' }) : await zipToGlb(buf);
     $('sfBar').style.width = '100%';
-    const name = (sfMeta.label && $('sfQ').value === CATS.find(c => c[0] === sfMeta.label)?.[1] ? sfMeta.label + ' ' : '') + '';
-    const rec = { id: 's' + m.uid, name: (name || m.name).trim().slice(0, 24), blob, size: sfMeta.size || 1, fly: !!sfMeta.fly, quad: !!sfMeta.quad,
+    let name = (sfMeta.label || m.name).trim().slice(0, 22), n = 2;
+    while (assets.some(a => a.name === name)) name = (sfMeta.label || m.name).trim().slice(0, 20) + ' ' + n++;
+    const rec = { id: 's' + m.uid, name, blob, size: sfMeta.size || 1, fly: !!sfMeta.fly, quad: !!sfMeta.quad,
       credit: `"${m.name}" — ${m.user?.displayName || ''} · ${m.license?.label || 'Sketchfab'}` };
-    if (assets.some(a => a.id === rec.id)) { sfStatus('هذا المجسّم موجود في مجسّماتك.'); return; }
     await idb.put(rec).catch(() => {});
     const a = { ...rec, url: URL.createObjectURL(blob), mine: true }; delete a.blob;
     assets.push(a); select(a); if (camActive) renderCamTray();
-    sfStatus('أُضيف «' + a.name + '» إلى مجسّماتك.');
+    sfStatus('✓ أُضيف «' + a.name + '». اضغط مجسّماً آخر، أو أغلق وجرّبه بيدك.'); sfPending = null;
+    if (card) { card.classList.remove('busy'); const tg = document.createElement('span'); tg.className = 'tag'; tg.textContent = 'مُضاف'; card.append(tg); }
     toast('أُضيف ' + a.name);
   } catch (err) {
     sfStatus((err instanceof TypeError ? 'تعذّر التنزيل المباشر من المتصفح.' : err.message === 'nogltf' ? 'الملف لا يحتوي على مجسّم يمكن قراءته.' : err.message) + manual, true);
-  } finally { sfBusy = false; setTimeout(() => { $('sfBarWrap').hidden = true; $('sfBar').style.width = '0'; }, 800); }
+  } finally { sfBusy = false; card?.classList.remove('busy'); setTimeout(() => { $('sfBarWrap').hidden = true; $('sfBar').style.width = '0'; }, 800); }
 }
 renderCats();
-$('sfClose').addEventListener('click', () => { $('sfSheet').hidden = true; });
+$('sfClose').addEventListener('click', () => { $('sfSheet').hidden = true; $('sfPanel').hidden = true; });
+$('sfTokenGo').addEventListener('click', () => {
+  const t = $('sfTokenIn').value.trim();
+  if (t.length < 20) { sfStatus('هذا لا يشبه مفتاح Sketchfab. انسخ «API Token» كاملاً.', true); return; }
+  store.set('sfToken', t); $('sfTokenRow').hidden = true;
+  if (sfPending) sfDownload(sfPending.m, sfPending.card);
+});
 $('sfForm').addEventListener('submit', e => { e.preventDefault(); sfMeta = { label: '', size: 1 }; [...$('sfCats').children].forEach(b => b.setAttribute('aria-pressed', 'false')); sfSearch($('sfQ').value); });
 $('sfAnim').addEventListener('change', () => sfSearch($('sfQ').value));
 
